@@ -14,13 +14,21 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        User::updateOrCreate(
+        $this->call(RoleAndPermissionSeeder::class);
+        $this->call(SatuanSeeder::class);
+        $this->call(SupplierSeeder::class);
+        $this->call(DapurSeeder::class);
+        $this->call(GudangSeeder::class);
+        $this->call(ItemSeeder::class);
+
+        $admin = User::updateOrCreate(
             ['email' => 'admin@gmail.com'],
             [
                 'name' => 'Administrator',
                 'password' => Hash::make('12341234'),
             ]
         );
+        $admin->syncRoles(['admin']);
 
         User::updateOrCreate(
             ['email' => 'user@deevatech.my.id'],

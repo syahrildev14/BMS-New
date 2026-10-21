@@ -54,6 +54,21 @@ export function errorAlert(message: string, title = 'Gagal') {
   });
 }
 
+export async function confirmLogout(): Promise<boolean> {
+  const result = await Swal.fire({
+    ...baseConfig,
+    icon: 'question',
+    title: 'Keluar dari aplikasi?',
+    text: 'Anda akan diarahkan kembali ke halaman login.',
+    showCancelButton: true,
+    confirmButtonText: 'Ya, keluar',
+    cancelButtonText: 'Batal',
+    reverseButtons: true,
+  });
+
+  return result.isConfirmed;
+}
+
 export function warningAlert(message: string, title = 'Perhatian') {
   return Swal.fire({
     ...baseConfig,
