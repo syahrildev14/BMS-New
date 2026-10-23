@@ -9,6 +9,7 @@ use App\Models\Supplier;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -62,7 +63,15 @@ class ItemController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'category' => ['required', 'in:DRY_GOODS,WET_GOODS'],
             'satuan_id' => ['required', 'integer', 'exists:satuans,id'],
-            'default_supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
+            // DRY_GOODS is stocked via Gudang and auto-drafts a PO against this
+            // supplier when stock runs short (DeliveryNoteService) — without it
+            // a shortfall line can never get a draft PO and is stuck forever.
+            'default_supplier_id' => [
+                Rule::requiredIf($request->input('category') === 'DRY_GOODS'),
+                'nullable',
+                'integer',
+                'exists:suppliers,id',
+            ],
             'margin_type' => ['required', 'in:PERCENTAGE,FIXED_IDR'],
             'margin_value' => ['required', 'numeric', 'min:0'],
             'is_active' => ['boolean'],

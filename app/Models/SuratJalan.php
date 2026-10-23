@@ -16,6 +16,8 @@ class SuratJalan extends Model
         'order_id',
         'type',
         'sequence_number',
+        'pdf_url',
+        'tanda_terima_pdf_url',
         'printed_by',
     ];
 

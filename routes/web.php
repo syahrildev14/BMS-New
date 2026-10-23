@@ -32,12 +32,23 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('dapur')->name('dapur.')->middleware('permission:orders.manage')->group(function () {
         Route::resource('orders', OrderController::class)
             ->only(['index', 'create', 'store', 'show']);
+        Route::post('orders/{order}/stt', [OrderController::class, 'submitStt'])->name('orders.stt');
+        Route::patch('orders/{order}/items/{orderItem}', [OrderController::class, 'updateItem'])->name('orders.items.update');
+        Route::delete('orders/{order}/items/{orderItem}', [OrderController::class, 'destroyItem'])->name('orders.items.destroy');
+        Route::get('orders/{order}/surat-jalan/{suratJalan}/tanda-terima', [OrderController::class, 'downloadTandaTerima'])
+            ->name('orders.tanda-terima.download');
     });
 
     Route::prefix('ops')->name('ops.')->group(function () {
         Route::resource('delivery-notes', DeliveryNoteController::class)
             ->only(['index', 'store'])
             ->middleware('permission:delivery-notes.manage');
+        Route::get('delivery-notes/{suratJalan}/download', [DeliveryNoteController::class, 'download'])
+            ->middleware('permission:delivery-notes.manage')
+            ->name('delivery-notes.download');
+        Route::get('delivery-notes/{suratJalan}/tanda-terima', [DeliveryNoteController::class, 'downloadTandaTerima'])
+            ->middleware('permission:delivery-notes.manage')
+            ->name('delivery-notes.tanda-terima.download');
 
         Route::middleware('permission:revisions.approve')->group(function () {
             Route::get('revisions', [RevisionController::class, 'index'])->name('revisions.index');
@@ -48,20 +59,39 @@ Route::middleware(['auth'])->group(function () {
 
     Route::prefix('purchasing')->name('purchasing.')->middleware('permission:purchase-orders.manage')->group(function () {
         Route::get('purchase-orders', [PurchaseOrderController::class, 'index'])->name('purchase-orders.index');
+        Route::get('purchase-orders/tanggal/{date}', [PurchaseOrderController::class, 'byDate'])
+            ->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}')
+            ->name('purchase-orders.by-date');
         Route::patch('purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'update'])->name('purchase-orders.update');
         Route::post('purchase-orders/{purchaseOrder}/send', [PurchaseOrderController::class, 'send'])->name('purchase-orders.send');
     });
 
     Route::prefix('gudang')->name('gudang.')->middleware('permission:stock.manage')->group(function () {
         Route::get('purchase-orders', [GudangPurchaseOrderController::class, 'index'])->name('purchase-orders.index');
+        Route::get('purchase-orders/tanggal/{date}', [GudangPurchaseOrderController::class, 'byDate'])
+            ->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}')
+            ->name('purchase-orders.by-date');
         Route::post('purchase-orders/{purchaseOrder}/receive', [GudangPurchaseOrderController::class, 'receive'])->name('purchase-orders.receive');
         Route::get('stock', [StockController::class, 'index'])->name('stock.index');
+        Route::post('stock/{item}/opname', [StockController::class, 'opname'])->name('stock.opname');
     });
 
-    Route::prefix('finance')->name('finance.')->middleware('permission:invoices.manage')->group(function () {
-        Route::resource('invoices', InvoiceController::class)
-            ->only(['index', 'store']);
-        Route::get('invoices/{invoice}/download', [InvoiceController::class, 'download'])->name('invoices.download');
+    Route::prefix('finance')->name('finance.')->group(function () {
+        Route::middleware('permission:invoices.manage')->group(function () {
+            Route::resource('invoices', InvoiceController::class)
+                ->only(['index', 'store']);
+            Route::get('invoices/tanggal/{date}', [InvoiceController::class, 'byDate'])
+                ->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}')
+                ->name('invoices.by-date');
+            Route::get('invoices/{invoice}/download', [InvoiceController::class, 'download'])->name('invoices.download');
+        });
+
+        // Checker: a separate permission from the Maker's invoices.manage, so
+        // approval can be restricted to a different user/role (maker-checker).
+        Route::middleware('permission:invoices.approve')->group(function () {
+            Route::post('invoices/{invoice}/approve', [InvoiceController::class, 'approve'])->name('invoices.approve');
+            Route::post('invoices/{invoice}/reject', [InvoiceController::class, 'reject'])->name('invoices.reject');
+        });
     });
 
     Route::prefix('admin')->name('admin.')->group(function () {

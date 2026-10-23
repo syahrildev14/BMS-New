@@ -221,7 +221,10 @@ export default function AdminItemsIndex({ items, suppliers, satuans }: { items: 
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label>Supplier Default</Label>
+              <Label>
+                Supplier Default
+                {form.data.category === 'DRY_GOODS' && <span className="text-red-500"> *</span>}
+              </Label>
               <Select
                 value={form.data.default_supplier_id || '_none'}
                 onValueChange={(v) => form.setData('default_supplier_id', v === '_none' ? '' : v)}
@@ -229,8 +232,8 @@ export default function AdminItemsIndex({ items, suppliers, satuans }: { items: 
                 <SelectTrigger>
                   <SelectValue placeholder="Tidak ada" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">Tidak ada</SelectItem>
+                <SelectContent avoidCollisions={false}>
+                  {form.data.category !== 'DRY_GOODS' && <SelectItem value="_none">Tidak ada</SelectItem>}
                   {suppliers.map((supplier) => (
                     <SelectItem key={supplier.id} value={String(supplier.id)}>
                       {supplier.name}
@@ -238,6 +241,11 @@ export default function AdminItemsIndex({ items, suppliers, satuans }: { items: 
                   ))}
                 </SelectContent>
               </Select>
+              {form.data.category === 'DRY_GOODS' && (
+                <p className="text-xs text-gray-400">
+                  Wajib untuk Dry Goods — dipakai untuk membuat draft PO otomatis kalau stok Gudang kurang.
+                </p>
+              )}
               <FieldError message={form.errors.default_supplier_id} />
             </div>
 

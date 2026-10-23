@@ -21,6 +21,7 @@ class RoleAndPermissionSeeder extends Seeder
             'delivery-notes.manage',
             'revisions.approve',
             'invoices.manage',
+            'invoices.approve',
             'pricing.manage',
             'roles.manage',
             'users.manage',

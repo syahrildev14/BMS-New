@@ -20,6 +20,10 @@ class DatabaseSeeder extends Seeder
         $this->call(DapurSeeder::class);
         $this->call(GudangSeeder::class);
         $this->call(ItemSeeder::class);
+        $this->call(UserSeeder::class);
+        $this->call(StockSeeder::class);
+        $this->call(DailyPriceSeeder::class);
+        $this->call(OrderSeeder::class);
 
         $admin = User::updateOrCreate(
             ['email' => 'admin@gmail.com'],

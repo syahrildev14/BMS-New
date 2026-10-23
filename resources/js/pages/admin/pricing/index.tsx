@@ -10,6 +10,7 @@ import { TablePagination } from '@/shared/components/ui/table-pagination';
 import { TableSearchInput } from '@/shared/components/ui/table-search-input';
 import { useTableControls, type TableColumn } from '@/shared/hooks/use-table-controls';
 import { errorAlert } from '@/shared/lib/alerts';
+import { formatRupiah } from '@/shared/lib/format';
 import type { DailyPrice, Item } from '@/shared/types/prd.type';
 
 const columns: TableColumn<Item>[] = [
@@ -17,6 +18,12 @@ const columns: TableColumn<Item>[] = [
   { key: 'supplier', accessor: (item) => item.default_supplier?.name },
   { key: 'margin', accessor: (item) => Number(item.margin_value) },
 ];
+
+/** Mirror backend PricingEngineService::calculateMargin() agar "Harga Jual Terhitung" ter-update live saat mengetik. */
+function calculateSellingPrice(cost: number, item: Item): number {
+  const marginValue = Number(item.margin_value);
+  return item.margin_type === 'PERCENTAGE' ? cost + (cost * marginValue) / 100 : cost + marginValue;
+}
 
 export default function AdminPricingIndex({
   date,
@@ -102,19 +109,26 @@ export default function AdminPricingIndex({
                 </TableCell>
                 <TableCell>{item.default_supplier?.name ?? '-'}</TableCell>
                 <TableCell>
-                  {item.margin_type === 'PERCENTAGE' ? `${item.margin_value}%` : `Rp${item.margin_value}`}
+                  {item.margin_type === 'PERCENTAGE' ? `${item.margin_value}%` : formatRupiah(item.margin_value)}
                 </TableCell>
                 <TableCell>
                   <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
+                    inputMode="numeric"
                     className="w-32"
-                    value={costPrices[item.id] ?? ''}
-                    onChange={(e) => setCostPrices((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                    value={costPrices[item.id] ? Number(costPrices[item.id]).toLocaleString('id-ID') : ''}
+                    onChange={(e) =>
+                      setCostPrices((prev) => ({ ...prev, [item.id]: e.target.value.replace(/\D/g, '') }))
+                    }
                   />
                 </TableCell>
-                <TableCell>{dailyPrices[item.id]?.calculated_price ?? '-'}</TableCell>
+                <TableCell>
+                  {costPrices[item.id]
+                    ? formatRupiah(calculateSellingPrice(Number(costPrices[item.id]), item))
+                    : dailyPrices[item.id]?.calculated_price
+                      ? formatRupiah(dailyPrices[item.id].calculated_price)
+                      : '-'}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

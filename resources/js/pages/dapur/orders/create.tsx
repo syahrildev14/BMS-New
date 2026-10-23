@@ -4,9 +4,9 @@ import { Trash2 } from 'lucide-react';
 import { AppLayout } from '@/layouts/AppLayout';
 import { PageHeader } from '@/shared/components/layout/PageHeader';
 import { Button } from '@/shared/components/ui/button';
+import { Combobox } from '@/shared/components/ui/combobox';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
 import type { Item, Supplier } from '@/shared/types/prd.type';
 
 interface OrderLineForm {
@@ -26,7 +26,7 @@ function emptyLine(): OrderLineForm {
 export default function DapurOrdersCreate({ items, suppliers }: { items: Item[]; suppliers: Supplier[] }) {
   const [lines, setLines] = useState<OrderLineForm[]>([emptyLine()]);
 
-  const { data, setData, post, processing, errors } = useForm({
+  const { data, setData, transform, post, processing, errors } = useForm({
     delivery_date: '',
     notes: '',
     items: [] as { item_id: number; supplier_id: number; qty_ordered: number; estimated_price: number }[],
@@ -60,7 +60,7 @@ export default function DapurOrdersCreate({ items, suppliers }: { items: Item[];
         estimated_price: Number(line.estimated_price || 0),
       }));
 
-    setData('items', payload);
+    transform((formData) => ({ ...formData, items: payload }));
 
     post(route('dapur.orders.store'), {
       onSuccess: () => setLines([emptyLine()]),
@@ -107,34 +107,24 @@ export default function DapurOrdersCreate({ items, suppliers }: { items: Item[];
               <div key={line.key} className="grid grid-cols-12 items-end gap-2 border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
                 <div className="col-span-4 flex flex-col gap-1">
                   <Label>Item</Label>
-                  <Select value={line.item_id} onValueChange={(v) => onPickItem(line.key, v)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih item..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {items.map((item) => (
-                        <SelectItem key={item.id} value={String(item.id)}>
-                          {item.name} ({item.satuan?.name})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    value={line.item_id}
+                    onValueChange={(v) => onPickItem(line.key, v)}
+                    placeholder="Ketik untuk cari item..."
+                    emptyText="Item tidak ditemukan."
+                    options={items.map((item) => ({ value: String(item.id), label: `${item.name} (${item.satuan?.name})` }))}
+                  />
                 </div>
 
                 <div className="col-span-3 flex flex-col gap-1">
                   <Label>Supplier</Label>
-                  <Select value={line.supplier_id} onValueChange={(v) => updateLine(line.key, { supplier_id: v })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih supplier..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {suppliers.map((supplier) => (
-                        <SelectItem key={supplier.id} value={String(supplier.id)}>
-                          {supplier.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    value={line.supplier_id}
+                    onValueChange={(v) => updateLine(line.key, { supplier_id: v })}
+                    placeholder="Ketik untuk cari supplier..."
+                    emptyText="Supplier tidak ditemukan."
+                    options={suppliers.map((supplier) => ({ value: String(supplier.id), label: supplier.name }))}
+                  />
                 </div>
 
                 <div className="col-span-2 flex flex-col gap-1">

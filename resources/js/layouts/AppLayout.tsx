@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
-import { ChevronDown, Menu, LogOut, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-react'; //icons
+import { ChevronDown, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Settings, Sun } from 'lucide-react'; //icons
+import { useAppearance } from '@/hooks/use-appearance';
 import { menuConfig } from '@/shared/constants/menu.config';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/shared/components/ui/collapsible';
 import {
@@ -46,6 +47,11 @@ export function AppLayout({ children }: AppLayoutProps) {
   /** Icon-only rail is a desktop affordance — on mobile the drawer always shows full labels regardless of the persisted preference. */
   const showCollapsedUI = collapsed && isDesktop;
 
+  const { appearance, updateAppearance } = useAppearance();
+  const isDark =
+    appearance === 'dark' || (appearance === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const toggleDarkMode = () => updateAppearance(isDark ? 'light' : 'dark');
+
   useEffect(() => {
     if (props.flash?.success) successAlert(props.flash.success);
     if (props.flash?.error) errorAlert(props.flash.error);
@@ -76,32 +82,32 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="flex min-h-screen bg-gray-50">
+      <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950">
         {/* Sidebar */}
         <aside
           className={cn(
-            'fixed inset-y-0 left-0 z-40 w-64 transform overflow-y-auto border-r border-gray-200 bg-white transition-all duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:self-start',
+            'fixed inset-y-0 left-0 z-40 w-64 transform overflow-y-auto border-r border-gray-200 bg-white transition-all duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:self-start dark:border-gray-800 dark:bg-gray-900',
             sidebarOpen ? 'translate-x-0' : '-translate-x-full',
             collapsed && 'lg:w-16',
           )}
         >
-          <div className={cn('flex h-16 items-center gap-2 border-b border-gray-100 px-5', collapsed && 'lg:justify-center lg:px-0')}>
+          <div className={cn('flex h-16 items-center gap-2 border-b border-gray-100 px-5 dark:border-gray-800', collapsed && 'lg:justify-center lg:px-0')}>
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-sm font-bold text-white shadow-sm">
               B
             </div>
-            <span className={cn('font-semibold text-gray-900', collapsed && 'lg:hidden')}>Sistem BMS</span>
+            <span className={cn('font-semibold text-gray-900 dark:text-gray-100', collapsed && 'lg:hidden')}>Sistem BMS</span>
           </div>
 
           <div
             className={cn(
-              'hidden items-center border-b border-gray-100 px-3 py-2 lg:flex',
+              'hidden items-center border-b border-gray-100 px-3 py-2 lg:flex dark:border-gray-800',
               collapsed ? 'lg:justify-center' : 'lg:justify-end',
             )}
           >
             <button
               type="button"
               onClick={toggleCollapsed}
-              className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+              className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
             >
               {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
             </button>
@@ -117,8 +123,9 @@ export function AppLayout({ children }: AppLayoutProps) {
                   <Link
                     href={item.href!}
                     className={cn(
-                      'flex items-center gap-3 rounded-md border-l-2 border-transparent px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900',
-                      active && 'border-blue-600 bg-blue-50 text-blue-700 hover:bg-blue-50 hover:text-blue-700',
+                      'flex items-center gap-3 rounded-md border-l-2 border-transparent px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100',
+                      active &&
+                        'border-blue-600 bg-blue-50 text-blue-700 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-500 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-300',
                       collapsed && 'lg:justify-center lg:border-l-0 lg:px-0',
                     )}
                   >
@@ -151,8 +158,8 @@ export function AppLayout({ children }: AppLayoutProps) {
                           <button
                             type="button"
                             className={cn(
-                              'flex w-full items-center justify-center rounded-md px-3 py-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 lg:justify-center lg:px-0',
-                              groupActive && 'bg-blue-50 text-blue-700 hover:bg-blue-50 hover:text-blue-700',
+                              'flex w-full items-center justify-center rounded-md px-3 py-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 lg:justify-center lg:px-0 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100',
+                              groupActive && 'bg-blue-50 text-blue-700 hover:bg-blue-50 hover:text-blue-700 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-300',
                             )}
                           >
                             <Icon className="h-4 w-4 shrink-0" />
@@ -182,8 +189,8 @@ export function AppLayout({ children }: AppLayoutProps) {
                     <button
                       type="button"
                       className={cn(
-                        'flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-gray-100 hover:text-gray-900',
-                        groupActive ? 'text-gray-900' : 'text-gray-600',
+                        'flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-gray-800 dark:hover:text-gray-100',
+                        groupActive ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400',
                       )}
                     >
                       <span className="flex items-center gap-3">
@@ -195,14 +202,15 @@ export function AppLayout({ children }: AppLayoutProps) {
                   </CollapsibleTrigger>
 
                   <CollapsibleContent>
-                    <div className="ml-7 mt-1 flex flex-col gap-0.5 border-l border-gray-100 pl-3">
+                    <div className="ml-7 mt-1 flex flex-col gap-0.5 border-l border-gray-100 pl-3 dark:border-gray-800">
                       {item.children.map((child) => (
                         <Link
                           key={child.href}
                           href={child.href}
                           className={cn(
-                            'rounded-md px-2 py-1.5 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900',
-                            url.startsWith(child.href) && 'bg-blue-50 font-medium text-blue-700 hover:bg-blue-50 hover:text-blue-700',
+                            'rounded-md px-2 py-1.5 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100',
+                            url.startsWith(child.href) &&
+                              'bg-blue-50 font-medium text-blue-700 hover:bg-blue-50 hover:text-blue-700 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-300',
                           )}
                         >
                           {child.label}
@@ -226,30 +234,43 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         {/* Main area */}
         <div className="flex flex-1 flex-col lg:pl-0">
-          <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 shadow-sm sm:px-6">
+          <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 shadow-sm sm:px-6 dark:border-gray-800 dark:bg-gray-900">
             <button
-              className="rounded-md p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 lg:hidden"
+              className="rounded-md p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 lg:hidden dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
               onClick={() => setSidebarOpen(true)}
             >
               <Menu className="h-5 w-5" />
             </button>
 
-            <div className="ml-auto flex items-center gap-4">
+            <div className="ml-auto flex items-center gap-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={toggleDarkMode}
+                    className="rounded-md p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                  >
+                    {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{isDark ? 'Mode Terang' : 'Mode Gelap'}</TooltipContent>
+              </Tooltip>
+
               {props.auth?.user && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-gray-100"
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
                     >
                       <UserAvatar avatarUrl={props.auth.user.avatar_url} name={props.auth.user.name} />
                       <div className="hidden flex-col items-start sm:flex">
-                        <span className="text-sm font-medium leading-tight text-gray-700">{props.auth.user.name}</span>
+                        <span className="text-sm font-medium leading-tight text-gray-700 dark:text-gray-300">{props.auth.user.name}</span>
                         {props.auth.user.roles?.[0]?.name && (
-                          <span className="text-xs leading-tight text-gray-400 capitalize">{props.auth.user.roles[0].name}</span>
+                          <span className="text-xs leading-tight text-gray-400 capitalize dark:text-gray-500">{props.auth.user.roles[0].name}</span>
                         )}
                       </div>
-                      <ChevronDown className="hidden h-4 w-4 text-gray-400 sm:inline" />
+                      <ChevronDown className="hidden h-4 w-4 text-gray-400 sm:inline dark:text-gray-500" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
@@ -261,7 +282,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                         Pengaturan Akun
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2 text-red-600 focus:bg-red-50 focus:text-red-600">
+                    <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2 text-red-600 focus:bg-red-50 focus:text-red-600 dark:text-red-400 dark:focus:bg-red-950">
                       <LogOut className="h-4 w-4" />
                       Logout
                     </DropdownMenuItem>

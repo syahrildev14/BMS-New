@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Gudang;
 use App\Models\Item;
 use App\Models\StockLot;
+use App\Services\StockService;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -39,5 +42,30 @@ class StockController extends Controller
             'gudang' => $gudang,
             'items' => $items,
         ]);
+    }
+
+    public function opname(Request $request, Item $item, StockService $service): RedirectResponse
+    {
+        abort_unless($item->category === 'DRY_GOODS', 422, 'Stock Opname hanya berlaku untuk barang DRY_GOODS.');
+
+        $validated = $request->validate([
+            'physical_qty' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        $gudang = Gudang::query()->firstOrFail();
+        $result = $service->recordOpname($gudang, $item, (float) $validated['physical_qty'], $request->user());
+
+        $message = $result['delta'] == 0.0
+            ? "Stok {$item->name} sudah sesuai, tidak ada penyesuaian."
+            : sprintf(
+                'Stok %s disesuaikan dari %s menjadi %s (%s%s).',
+                $item->name,
+                number_format($result['system_qty'], 2),
+                number_format($result['physical_qty'], 2),
+                $result['delta'] > 0 ? '+' : '',
+                number_format($result['delta'], 2)
+            );
+
+        return back()->with('success', $message);
     }
 }

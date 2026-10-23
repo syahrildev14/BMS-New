@@ -17,10 +17,32 @@ class InvoiceController extends Controller
 {
     public function index(): Response
     {
+        // Grouped by the Order's delivery_date (when the goods were actually
+        // received by Dapur) rather than when the invoice document itself was
+        // generated — Finance thinks in terms of "what came in on this date",
+        // not "what I happened to click Generate for on this date".
+        $groups = Invoice::query()
+            ->join('orders', 'orders.id', '=', 'invoices.order_id')
+            ->selectRaw('orders.delivery_date as date, COUNT(invoices.id) as invoice_count, SUM(invoices.total_amount) as total_amount')
+            ->groupBy('orders.delivery_date')
+            ->orderByDesc('orders.delivery_date')
+            ->get();
+
         return Inertia::render('finance/invoices/index', [
-            'invoices' => Invoice::with(['order', 'dapur', 'supplier'])->latest()->get(),
+            'groups' => $groups,
             'billableOrders' => Order::with('dapur')
                 ->whereHas('orderItems', fn ($query) => $query->whereNotNull('qty_received'))
+                ->get(),
+        ]);
+    }
+
+    public function byDate(string $date): Response
+    {
+        return Inertia::render('finance/invoices/show', [
+            'date' => $date,
+            'invoices' => Invoice::with(['order', 'dapur', 'supplier'])
+                ->whereHas('order', fn ($query) => $query->whereDate('delivery_date', $date))
+                ->latest()
                 ->get(),
         ]);
     }
@@ -34,7 +56,21 @@ class InvoiceController extends Controller
         $order = Order::findOrFail($validated['order_id']);
         $invoices = $service->generateInvoicesForOrder($order);
 
-        return back()->with('success', "{$invoices->count()} invoice berhasil diterbitkan.");
+        return back()->with('success', "{$invoices->count()} draft invoice dibuat, menunggu persetujuan.");
+    }
+
+    public function approve(Invoice $invoice, SplitInvoiceService $service): RedirectResponse
+    {
+        $service->approveInvoice($invoice);
+
+        return back()->with('success', "Invoice {$invoice->invoice_number} disetujui dan diterbitkan.");
+    }
+
+    public function reject(Invoice $invoice, SplitInvoiceService $service): RedirectResponse
+    {
+        $service->rejectInvoice($invoice);
+
+        return back()->with('success', "Invoice {$invoice->invoice_number} ditolak.");
     }
 
     public function download(Invoice $invoice): StreamedResponse

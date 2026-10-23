@@ -16,7 +16,7 @@ export function TablePagination({ page, totalPages, totalItems, pageSize, onPage
   const end = Math.min(page * pageSize, totalItems);
 
   return (
-    <div className="flex items-center justify-between border-t border-gray-100 px-2 py-3 text-sm text-gray-500">
+    <div className="flex items-center justify-between border-t border-gray-100 px-2 py-3 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
       <span>
         Menampilkan {start}-{end} dari {totalItems} data
       </span>
@@ -25,7 +25,7 @@ export function TablePagination({ page, totalPages, totalItems, pageSize, onPage
           <ChevronLeft className="h-4 w-4" />
           Sebelumnya
         </Button>
-        <span className="px-1 text-gray-600">
+        <span className="px-1 text-gray-600 dark:text-gray-400">
           Halaman {page} / {totalPages}
         </span>
         <Button variant="outline" size="sm" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages}>

@@ -21,8 +21,8 @@ export function SortableTableHead({ label, columnKey, sort, onSort, className }:
         type="button"
         onClick={() => onSort(columnKey)}
         className={cn(
-          'inline-flex items-center gap-1 text-left text-xs font-semibold uppercase tracking-wide transition-colors hover:text-gray-900',
-          active ? 'text-gray-900' : 'text-gray-500',
+          'inline-flex items-center gap-1 text-left text-xs font-semibold uppercase tracking-wide transition-colors hover:text-gray-900 dark:hover:text-gray-100',
+          active ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400',
         )}
       >
         {label}

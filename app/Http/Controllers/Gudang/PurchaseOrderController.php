@@ -14,8 +14,24 @@ class PurchaseOrderController extends Controller
 {
     public function index(): Response
     {
+        $groups = PurchaseOrder::query()
+            ->whereIn('status', ['SENT', 'PARTIALLY_RECEIVED'])
+            ->selectRaw('DATE(sent_at) as date, COUNT(*) as po_count')
+            ->groupBy('date')
+            ->orderByDesc('date')
+            ->get();
+
         return Inertia::render('gudang/purchase-orders/index', [
+            'groups' => $groups,
+        ]);
+    }
+
+    public function byDate(string $date): Response
+    {
+        return Inertia::render('gudang/purchase-orders/show', [
+            'date' => $date,
             'purchaseOrders' => PurchaseOrder::whereIn('status', ['SENT', 'PARTIALLY_RECEIVED'])
+                ->whereDate('sent_at', $date)
                 ->with(['supplier', 'items.item.satuan'])
                 ->latest('sent_at')
                 ->get(),

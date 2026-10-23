@@ -38,9 +38,9 @@
             @foreach ($invoice->order->orderItems->where('supplier_id', $invoice->supplier_id)->whereNotNull('qty_received') as $item)
                 <tr>
                     <td>{{ $item->item->name }}</td>
-                    <td>{{ $item->qty_received }} {{ $item->item->satuan->name }}</td>
-                    <td>{{ number_format($item->final_selling_price, 2) }}</td>
-                    <td class="text-right">{{ number_format($item->qty_received * $item->final_selling_price, 2) }}</td>
+                    <td>{{ \App\Support\Format::qty($item->qty_received) }} {{ $item->item->satuan->name }}</td>
+                    <td>{{ \App\Support\Format::rupiah($item->final_selling_price) }}</td>
+                    <td class="text-right">{{ \App\Support\Format::rupiah($item->qty_received * $item->final_selling_price) }}</td>
                 </tr>
             @endforeach
         </tbody>
@@ -49,7 +49,7 @@
     <table class="totals">
         <tr>
             <td class="text-right"><strong>Total Invoice</strong></td>
-            <td class="text-right" style="width: 150px;">{{ number_format($invoice->total_amount, 2) }}</td>
+            <td class="text-right" style="width: 150px;">{{ \App\Support\Format::rupiah($invoice->total_amount) }}</td>
         </tr>
     </table>
 </body>

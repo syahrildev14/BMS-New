@@ -19,8 +19,23 @@ class PurchaseOrderController extends Controller
 {
     public function index(): Response
     {
+        $groups = PurchaseOrder::query()
+            ->selectRaw('DATE(created_at) as date, COUNT(*) as po_count')
+            ->groupBy('date')
+            ->orderByDesc('date')
+            ->get();
+
         return Inertia::render('purchasing/purchase-orders/index', [
+            'groups' => $groups,
+        ]);
+    }
+
+    public function byDate(string $date): Response
+    {
+        return Inertia::render('purchasing/purchase-orders/show', [
+            'date' => $date,
             'purchaseOrders' => PurchaseOrder::with(['supplier', 'gudang', 'triggeredByOrder.dapur', 'items.item.satuan'])
+                ->whereDate('created_at', $date)
                 ->latest()
                 ->get(),
         ]);

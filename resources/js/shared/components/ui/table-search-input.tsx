@@ -8,7 +8,7 @@ export function TableSearchInput({ value, onChange, placeholder = 'Cari...' }: {
 }) {
   return (
     <div className="relative w-full max-w-xs">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
       <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="pl-8" />
     </div>
   );

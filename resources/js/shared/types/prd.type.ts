@@ -84,7 +84,10 @@ export interface SuratJalan {
   order_id: number;
   type: 'PRIMARY' | 'ADDON';
   sequence_number: number;
+  pdf_url: string | null;
+  tanda_terima_pdf_url: string | null;
   printed_by: number;
+  order?: Order;
 }
 
 export interface Invoice {
