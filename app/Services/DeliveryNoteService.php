@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\GenerateOrderSuratJalanPdfJob;
 use App\Jobs\GenerateSuratJalanPdfJob;
 use App\Models\AuditLog;
 use App\Models\Gudang;
@@ -9,6 +10,7 @@ use App\Models\Item;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
 use App\Models\SuratJalan;
 use App\Models\User;
 use Illuminate\Support\Collection;
@@ -30,9 +32,12 @@ class DeliveryNoteService
      * delivery is actually due, instead of discovering the shortfall at the
      * same moment Ops is trying to ship.
      *
-     * Idempotent: an order_item already covered by an in-flight (DRAFT/SENT/
-     * PARTIALLY_RECEIVED) PO is left alone, so calling this again later (e.g.
-     * generateSuratJalan()'s own safety-net call) never double-drafts.
+     * Idempotent: an order_item already fully covered by the combined
+     * qty_ordered of its in-flight (DRAFT/SENT/PARTIALLY_RECEIVED) POs is left
+     * alone, so calling this again later (e.g. generateSuratJalan()'s own
+     * safety-net call) never double-drafts. If Purchasing has edited a draft
+     * PO's qty down below what the order actually needs, only the remaining
+     * gap is drafted — not the full qty again.
      *
      * @return array{purchase_orders: Collection<int, PurchaseOrder>, unresolved_shortfalls: Collection<int, OrderItem>}
      */
@@ -59,7 +64,10 @@ class DeliveryNoteService
                     continue;
                 }
 
-                if ($this->hasInFlightShortfallPo($order, $item)) {
+                $alreadyInFlight = $this->inFlightShortfallQty($order, $item);
+                $remainingNeeded = round((float) $orderItem->qty_ordered - $alreadyInFlight, 2);
+
+                if ($remainingNeeded <= 0.0001) {
                     continue;
                 }
 
@@ -67,7 +75,7 @@ class DeliveryNoteService
                     $shortfalls->push([
                         'item_id' => $item->id,
                         'supplier_id' => $item->default_supplier_id,
-                        'qty' => (float) $orderItem->qty_ordered,
+                        'qty' => $remainingNeeded,
                         'unit_cost' => (float) $item->base_cost_price,
                     ]);
                 } else {
@@ -87,12 +95,19 @@ class DeliveryNoteService
         });
     }
 
-    private function hasInFlightShortfallPo(Order $order, Item $item): bool
+    /**
+     * Sum of qty_ordered across this order's in-flight (DRAFT/SENT/
+     * PARTIALLY_RECEIVED) PO lines for this item — not just "does one exist",
+     * since Purchasing can edit a draft PO's qty down below what's needed
+     * (see PurchaseOrderController::update) before sending it.
+     */
+    private function inFlightShortfallQty(Order $order, Item $item): float
     {
-        return PurchaseOrder::where('triggered_by_order_id', $order->id)
-            ->whereIn('status', ['DRAFT', 'SENT', 'PARTIALLY_RECEIVED'])
-            ->whereHas('items', fn ($query) => $query->where('item_id', $item->id))
-            ->exists();
+        return (float) PurchaseOrderItem::where('item_id', $item->id)
+            ->whereHas('purchaseOrder', fn ($query) => $query
+                ->where('triggered_by_order_id', $order->id)
+                ->whereIn('status', ['DRAFT', 'SENT', 'PARTIALLY_RECEIVED']))
+            ->sum('qty_ordered');
     }
 
     /**
@@ -232,6 +247,10 @@ class DeliveryNoteService
         if ($result['surat_jalan']) {
             GenerateSuratJalanPdfJob::dispatchSync($result['surat_jalan']->id);
             $result['surat_jalan']->refresh();
+
+            // Dapur-facing download is one combined PDF per Order (covering
+            // every PRIMARY/ADDON shipment so far), regenerated on every new SJ.
+            GenerateOrderSuratJalanPdfJob::dispatchSync($result['surat_jalan']->order_id);
         }
 
         return $result;

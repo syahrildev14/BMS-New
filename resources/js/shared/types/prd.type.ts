@@ -73,6 +73,8 @@ export interface Order {
   delivery_date: string;
   status: OrderStatus;
   notes: string | null;
+  pdf_url: string | null;
+  tanda_terima_pdf_url: string | null;
   dapur?: Dapur;
   order_items?: OrderItem[];
   surat_jalans?: SuratJalan[];
@@ -90,6 +92,8 @@ export interface SuratJalan {
   order?: Order;
 }
 
+export type FinanceDocumentStatus = 'DRAFT' | 'ISSUED' | 'PAID' | 'OVERDUE' | 'VOID';
+
 export interface Invoice {
   id: number;
   invoice_number: string;
@@ -97,11 +101,98 @@ export interface Invoice {
   dapur_id: number;
   supplier_id: number;
   total_amount: string;
-  status: 'DRAFT' | 'ISSUED' | 'PAID' | 'OVERDUE' | 'VOID';
+  status: FinanceDocumentStatus;
   pdf_url: string | null;
+  due_date: string | null;
+  paid_at: string | null;
+  payment_method: string | null;
+  payment_reference: string | null;
   order?: Order;
   dapur?: Dapur;
   supplier?: Supplier;
+}
+
+export interface SupplierBill {
+  id: number;
+  bill_number: string;
+  order_id: number;
+  dapur_id: number;
+  supplier_id: number;
+  total_amount: string;
+  status: FinanceDocumentStatus;
+  due_date: string | null;
+  paid_at: string | null;
+  payment_method: string | null;
+  payment_reference: string | null;
+  order?: Order;
+  dapur?: Dapur;
+  supplier?: Supplier;
+}
+
+export interface FinanceSummary {
+  revenue: number;
+  cogs: number;
+  gross_margin: number;
+  margin_percent: number;
+  ar_outstanding: number;
+  ap_outstanding: number;
+  cash_in: number;
+  cash_out: number;
+  net_cash_flow: number;
+}
+
+export interface FinanceTrendPoint {
+  date: string;
+  revenue: number;
+  cogs: number;
+  margin: number;
+}
+
+export interface FinanceAgingBucket {
+  bucket: string;
+  total: number;
+  count: number;
+}
+
+export interface FinanceBreakdownRow {
+  id: number;
+  label: string;
+  revenue: number;
+  cogs: number;
+  margin: number;
+}
+
+export interface FinanceCategoryBreakdown {
+  category: 'DRY_GOODS' | 'WET_GOODS';
+  revenue: number;
+  cogs: number;
+  margin: number;
+}
+
+export interface DashboardTrendPoint {
+  label: string;
+  value: number;
+}
+
+export interface DashboardWidgets {
+  dapur?: { open_orders: number; pending_stt: number; trend: DashboardTrendPoint[] };
+  ops?: { orders_pending_sj: number; pending_revisions?: number };
+  purchasing?: { draft_pos: number };
+  gudang?: { pos_awaiting_receive: number; out_of_stock_items: number };
+  finance?: {
+    filters: { from: string; to: string; dapur_id: number | null; supplier_id: number | null };
+    summary: FinanceSummary;
+    trend: FinanceTrendPoint[];
+    arAging: FinanceAgingBucket[];
+    apAging: FinanceAgingBucket[];
+    byDapur: FinanceBreakdownRow[];
+    bySupplier: FinanceBreakdownRow[];
+    byCategory: FinanceCategoryBreakdown[];
+    dapurs: { id: number; name: string }[];
+    suppliers: { id: number; name: string }[];
+    draft_invoices?: number;
+    draft_bills?: number;
+  };
 }
 
 export interface Role {

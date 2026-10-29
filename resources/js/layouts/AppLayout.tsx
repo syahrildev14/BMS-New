@@ -92,7 +92,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           )}
         >
           <div className={cn('flex h-16 items-center gap-2 border-b border-gray-100 px-5 dark:border-gray-800', collapsed && 'lg:justify-center lg:px-0')}>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-sm font-bold text-white shadow-sm">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground shadow-sm">
               B
             </div>
             <span className={cn('font-semibold text-gray-900 dark:text-gray-100', collapsed && 'lg:hidden')}>Sistem BMS</span>
@@ -125,7 +125,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                     className={cn(
                       'flex items-center gap-3 rounded-md border-l-2 border-transparent px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100',
                       active &&
-                        'border-blue-600 bg-blue-50 text-blue-700 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-500 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-300',
+                        'border-primary bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary dark:bg-primary/20 dark:hover:bg-primary/20',
                       collapsed && 'lg:justify-center lg:border-l-0 lg:px-0',
                     )}
                   >
@@ -159,7 +159,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                             type="button"
                             className={cn(
                               'flex w-full items-center justify-center rounded-md px-3 py-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 lg:justify-center lg:px-0 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100',
-                              groupActive && 'bg-blue-50 text-blue-700 hover:bg-blue-50 hover:text-blue-700 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-300',
+                              groupActive && 'bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary dark:bg-primary/20 dark:hover:bg-primary/20',
                             )}
                           >
                             <Icon className="h-4 w-4 shrink-0" />
@@ -210,7 +210,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                           className={cn(
                             'rounded-md px-2 py-1.5 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100',
                             url.startsWith(child.href) &&
-                              'bg-blue-50 font-medium text-blue-700 hover:bg-blue-50 hover:text-blue-700 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-300',
+                              'bg-primary/10 font-medium text-primary hover:bg-primary/10 hover:text-primary dark:bg-primary/20 dark:hover:bg-primary/20',
                           )}
                         >
                           {child.label}
@@ -292,7 +292,13 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </header>
 
-          <main className="flex-1 p-4 sm:p-6">{children}</main>
+          <main className="relative flex-1 p-4 sm:p-6">
+            {/* Electric blue ambient light — sits behind the page content, not tied to any one component. */}
+            <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(37,99,235,0.7),_rgba(37,99,235,0.3)_45%,_transparent_75%)] blur-3xl" />
+            </div>
+            {children}
+          </main>
         </div>
       </div>
     </TooltipProvider>

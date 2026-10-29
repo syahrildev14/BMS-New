@@ -11,7 +11,7 @@
     --animate-collapsible-up: collapsible-up 0.2s ease-out;
 
     --font-sans:
-        'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+        'Poppins', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
     --radius-lg: var(--radius);
     --radius-md: calc(var(--radius) - 2px);
@@ -104,6 +104,11 @@
     --chart-3: hsl(197, 37%, 24%);
     --chart-4: hsl(43, 74%, 66%);
     --chart-5: hsl(27, 87%, 67%);
+    /* Validated categorical slots (dataviz skill palette.md) — revenue/COGS
+       series on the Finance dashboard. Not themeable via Admin Appearance:
+       these are the two hues the CVD/contrast checks were run against. */
+    --series-revenue: #2a78d6;
+    --series-cogs: #008300;
     --radius: 0.5rem;
     --sidebar-background: hsl(0, 0%, 98%);
     --sidebar-foreground: hsl(240, 5.3%, 30%);
@@ -140,6 +145,8 @@
     --chart-3: hsl(30, 80%, 55%);
     --chart-4: hsl(280, 65%, 60%);
     --chart-5: hsl(340, 75%, 55%);
+    --series-revenue: #3987e5;
+    --series-cogs: #008300;
     --sidebar-background: hsl(0, 0%, 7%);
     --sidebar-foreground: hsl(0, 0%, 80%);
     --sidebar-primary: hsl(360, 100%, 100%);

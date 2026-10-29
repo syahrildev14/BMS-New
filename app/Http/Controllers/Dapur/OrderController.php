@@ -4,12 +4,12 @@ namespace App\Http\Controllers\Dapur;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreOrderRequest;
+use App\Jobs\GenerateOrderTandaTerimaPdfJob;
 use App\Jobs\GenerateTandaTerimaPdfJob;
 use App\Models\Item;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Supplier;
-use App\Models\SuratJalan;
 use App\Services\RevisionGateService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -67,7 +67,7 @@ class OrderController extends Controller
         abort_unless($order->dapur_id === $request->user()->dapur_id, 403);
 
         return Inertia::render('dapur/orders/show', [
-            'order' => $order->load('orderItems.item', 'suratJalans'),
+            'order' => $order->load('orderItems.item', ['suratJalans' => fn ($query) => $query->orderBy('sequence_number')]),
         ]);
     }
 
@@ -110,25 +110,41 @@ class OrderController extends Controller
                 ->unique();
         });
 
-        // One Tanda Terima per Surat Jalan touched by this submission — a
-        // multi-SJ Order (PRIMARY + ADDON, shipped on different days) gets a
-        // separate proof-of-receipt per shipment, not one blended document.
+        // Per-SJ Tanda Terima PDF (operational record, same granularity as the
+        // Surat Jalan each shipment travelled with) ...
         foreach ($affectedSjIds as $suratJalanId) {
             GenerateTandaTerimaPdfJob::dispatchSync($suratJalanId);
+        }
+
+        // ... plus one combined Tanda Terima PDF for the whole Order, which is
+        // what Dapur actually downloads — covers every shipment confirmed so
+        // far, not just the ones touched by this particular STT submission.
+        if ($affectedSjIds->isNotEmpty()) {
+            GenerateOrderTandaTerimaPdfJob::dispatchSync($order->id);
         }
 
         return back()->with('success', 'Data penerimaan barang (STT) berhasil disimpan.');
     }
 
-    public function downloadTandaTerima(Request $request, Order $order, SuratJalan $suratJalan): StreamedResponse
+    public function downloadSuratJalan(Request $request, Order $order): StreamedResponse
     {
         abort_unless($order->dapur_id === $request->user()->dapur_id, 403);
-        abort_unless($suratJalan->order_id === $order->id, 404);
-        abort_unless($suratJalan->tanda_terima_pdf_url && Storage::disk('local')->exists($suratJalan->tanda_terima_pdf_url), 404);
+        abort_unless($order->pdf_url && Storage::disk('local')->exists($order->pdf_url), 404);
 
         return Storage::disk('local')->download(
-            $suratJalan->tanda_terima_pdf_url,
-            'Tanda-Terima-' . str_replace('/', '-', $suratJalan->sj_number) . '.pdf'
+            $order->pdf_url,
+            'Surat-Jalan-' . str_replace('/', '-', $order->order_number) . '.pdf'
+        );
+    }
+
+    public function downloadTandaTerima(Request $request, Order $order): StreamedResponse
+    {
+        abort_unless($order->dapur_id === $request->user()->dapur_id, 403);
+        abort_unless($order->tanda_terima_pdf_url && Storage::disk('local')->exists($order->tanda_terima_pdf_url), 404);
+
+        return Storage::disk('local')->download(
+            $order->tanda_terima_pdf_url,
+            'Tanda-Terima-' . str_replace('/', '-', $order->order_number) . '.pdf'
         );
     }
 

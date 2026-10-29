@@ -33,6 +33,11 @@ class Supplier extends Model
         return $this->hasMany(Invoice::class);
     }
 
+    public function supplierBills(): HasMany
+    {
+        return $this->hasMany(SupplierBill::class);
+    }
+
     public function users(): HasMany
     {
         return $this->hasMany(User::class);

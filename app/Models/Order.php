@@ -17,6 +17,8 @@ class Order extends Model
         'delivery_date',
         'status',
         'notes',
+        'pdf_url',
+        'tanda_terima_pdf_url',
     ];
 
     protected function casts(): array
@@ -44,6 +46,11 @@ class Order extends Model
     public function invoices(): HasMany
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    public function supplierBills(): HasMany
+    {
+        return $this->hasMany(SupplierBill::class);
     }
 
     public function purchaseOrders(): HasMany

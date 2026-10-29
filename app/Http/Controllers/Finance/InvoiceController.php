@@ -73,6 +73,19 @@ class InvoiceController extends Controller
         return back()->with('success', "Invoice {$invoice->invoice_number} ditolak.");
     }
 
+    public function pay(Request $request, Invoice $invoice, SplitInvoiceService $service): RedirectResponse
+    {
+        $validated = $request->validate([
+            'payment_method' => ['required', 'string', 'max:100'],
+            'payment_reference' => ['nullable', 'string', 'max:255'],
+            'paid_at' => ['nullable', 'date'],
+        ]);
+
+        $service->markAsPaid($invoice, $validated);
+
+        return back()->with('success', "Invoice {$invoice->invoice_number} ditandai lunas.");
+    }
+
     public function download(Invoice $invoice): StreamedResponse
     {
         abort_unless($invoice->pdf_url && Storage::disk('local')->exists($invoice->pdf_url), 404);

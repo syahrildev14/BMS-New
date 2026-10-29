@@ -18,12 +18,18 @@ class Invoice extends Model
         'total_amount',
         'status',
         'pdf_url',
+        'due_date',
+        'paid_at',
+        'payment_method',
+        'payment_reference',
     ];
 
     protected function casts(): array
     {
         return [
             'total_amount' => 'decimal:2',
+            'due_date' => 'date:Y-m-d',
+            'paid_at' => 'datetime',
         ];
     }
 

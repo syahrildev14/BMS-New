@@ -18,4 +18,12 @@ export default defineConfig({
     esbuild: {
         jsx: 'automatic',
     },
+    server: {
+        host: '0.0.0.0', // Agar bisa diakses dari jaringan luar
+        port: 5173,
+        // Jika error pada HMR (React Refresh), tambahkan ini:
+        hmr: {
+            host: '192.168.1.203', // Sesuaikan dengan IP komputer server Anda
+        },
+    },
 });

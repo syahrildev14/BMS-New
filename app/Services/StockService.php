@@ -57,10 +57,12 @@ class StockService
 
             $poItem->increment('qty_received', $qtyReceived);
 
-            $allItems = $purchaseOrder->items()->get();
-            $fullyReceived = $allItems->every(fn (PurchaseOrderItem $i) => $i->id === $poItem->id
-                ? ($i->qty_received + $qtyReceived) >= $i->qty_ordered
-                : $i->qty_received >= $i->qty_ordered);
+            // $allItems is fetched AFTER the increment above, so qty_received here
+            // already reflects this receipt — must not be added a second time.
+            $allItems = $purchaseOrder->items()->lockForUpdate()->get();
+            $fullyReceived = $allItems->every(
+                fn (PurchaseOrderItem $i) => (float) $i->qty_received >= (float) $i->qty_ordered
+            );
 
             $purchaseOrder->update([
                 'status' => $fullyReceived ? 'RECEIVED' : 'PARTIALLY_RECEIVED',

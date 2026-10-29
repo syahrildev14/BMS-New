@@ -223,41 +223,37 @@ export default function DapurOrdersShow({ order }: { order: Order }) {
         </div>
 
         <div>
-          <h2 className="mb-2 text-sm font-semibold text-gray-700">Surat Jalan</h2>
+          <h2 className="mb-2 text-sm font-semibold text-gray-700">Surat Jalan &amp; Tanda Terima</h2>
           {(order.surat_jalans ?? []).length === 0 ? (
             <p className="text-sm text-gray-400">Belum ada Surat Jalan diterbitkan untuk order ini.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>No. SJ</TableHead>
-                  <TableHead>Tipe</TableHead>
-                  <TableHead>Urutan</TableHead>
-                  <TableHead className="text-right">Tanda Terima</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(order.surat_jalans ?? []).map((sj) => (
-                  <TableRow key={sj.id}>
-                    <TableCell className="font-medium">{sj.sj_number}</TableCell>
-                    <TableCell>{sj.type}</TableCell>
-                    <TableCell>{sj.sequence_number}</TableCell>
-                    <TableCell className="text-right">
-                      {sj.tanda_terima_pdf_url ? (
-                        <a
-                          href={route('dapur.orders.tanda-terima.download', [order.id, sj.id])}
-                          className="text-sm font-medium text-blue-600 hover:underline"
-                        >
-                          Cetak PDF
-                        </a>
-                      ) : (
-                        <span className="text-sm text-gray-400">Belum ada STT</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="flex flex-col gap-3 rounded-md border border-gray-200 p-4 dark:border-gray-800">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                {(order.surat_jalans ?? []).length} pengiriman: {(order.surat_jalans ?? []).map((sj) => sj.sj_number).join(', ')}
+              </p>
+              <p className="text-xs text-gray-400">
+                Dokumen berikut digabung otomatis untuk seluruh pengiriman pada order ini — tidak perlu download satu-satu per SJ.
+              </p>
+              <div className="flex gap-4">
+                {order.pdf_url ? (
+                  <a href={route('dapur.orders.surat-jalan.download', order.id)} className="text-sm font-medium text-blue-600 hover:underline">
+                    Download Surat Jalan
+                  </a>
+                ) : (
+                  <span className="text-sm text-gray-400">Surat Jalan belum tersedia</span>
+                )}
+                {order.tanda_terima_pdf_url ? (
+                  <a
+                    href={route('dapur.orders.tanda-terima.download', order.id)}
+                    className="text-sm font-medium text-emerald-600 hover:underline"
+                  >
+                    Download Tanda Terima
+                  </a>
+                ) : (
+                  <span className="text-sm text-gray-400">Tanda Terima belum tersedia</span>
+                )}
+              </div>
+            </div>
           )}
         </div>
 

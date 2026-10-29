@@ -39,8 +39,11 @@ class SplitInvoiceService
                     continue;
                 }
 
+                // Only quantity that actually passed QC is billable (PRD
+                // §Module 4 Reconciled Split Billing) — qty_rejected must be
+                // subtracted, not just qty_received on its own.
                 $totalAmount = $items->sum(function ($item) {
-                    return $item->qty_received * $item->final_selling_price;
+                    return ((float) $item->qty_received - (float) $item->qty_rejected) * $item->final_selling_price;
                 });
 
                 // Keep a re-generated invoice's original number untouched;
@@ -94,7 +97,10 @@ class SplitInvoiceService
         abort_unless($invoice->status === 'DRAFT', 422, 'Hanya invoice berstatus DRAFT yang bisa disetujui.');
 
         DB::transaction(function () use ($invoice) {
-            $invoice->update(['status' => 'ISSUED']);
+            $invoice->update([
+                'status' => 'ISSUED',
+                'due_date' => now()->addDays((int) config('finance.invoice_due_days'))->toDateString(),
+            ]);
 
             $order = $invoice->order;
 
@@ -118,6 +124,31 @@ class SplitInvoiceService
         abort_unless($invoice->status === 'DRAFT', 422, 'Hanya invoice berstatus DRAFT yang bisa ditolak.');
 
         $invoice->update(['status' => 'VOID']);
+
+        return $invoice->refresh();
+    }
+
+    /**
+     * Dapur has actually paid: ISSUED/OVERDUE -> PAID. This is what makes the
+     * AR side of the cash-flow/P&L reporting (FinanceAnalyticsService) real —
+     * revenue is recognized at ISSUED, but cash-in is only counted at PAID.
+     *
+     * @param  array{payment_method: string, payment_reference?: ?string, paid_at?: ?string}  $payment
+     */
+    public function markAsPaid(Invoice $invoice, array $payment): Invoice
+    {
+        abort_unless(
+            in_array($invoice->status, ['ISSUED', 'OVERDUE'], true),
+            422,
+            'Hanya invoice berstatus ISSUED/OVERDUE yang bisa ditandai lunas.'
+        );
+
+        $invoice->update([
+            'status' => 'PAID',
+            'paid_at' => $payment['paid_at'] ?? now(),
+            'payment_method' => $payment['payment_method'],
+            'payment_reference' => $payment['payment_reference'] ?? null,
+        ]);
 
         return $invoice->refresh();
     }

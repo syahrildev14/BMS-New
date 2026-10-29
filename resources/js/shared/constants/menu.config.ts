@@ -79,6 +79,7 @@ export const menuConfig: MenuItem[] = [
     icon: Receipt,
     children: [
       { label: 'Invoice', href: '/finance/invoices', permission: 'invoices.manage' },
+      { label: 'Utang Supplier', href: '/finance/supplier-bills', permission: 'supplier-bills.manage' },
     ],
   },
   {

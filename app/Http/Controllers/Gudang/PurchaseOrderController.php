@@ -55,6 +55,14 @@ class PurchaseOrderController extends Controller
 
         foreach ($validated['items'] as $line) {
             $poItem = $purchaseOrder->items()->whereKey($line['id'])->firstOrFail();
+
+            $remaining = round((float) $poItem->qty_ordered - (float) $poItem->qty_received, 2);
+            abort_if(
+                (float) $line['qty_received'] > $remaining + 0.0001,
+                422,
+                "Qty diterima untuk {$poItem->item->name} ({$line['qty_received']}) melebihi sisa yang masih harus diterima ({$remaining})."
+            );
+
             $service->receive($poItem, (float) $line['qty_received'], (float) $line['unit_cost'], $request->user());
         }
 

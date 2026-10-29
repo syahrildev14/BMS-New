@@ -8,7 +8,9 @@ use App\Http\Controllers\Admin\SatuanController;
 use App\Http\Controllers\Admin\SupplierController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Dapur\OrderController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Finance\InvoiceController;
+use App\Http\Controllers\Finance\SupplierBillController;
 use App\Http\Controllers\Gudang\PurchaseOrderController as GudangPurchaseOrderController;
 use App\Http\Controllers\Gudang\StockController;
 use App\Http\Controllers\Ops\DeliveryNoteController;
@@ -16,7 +18,6 @@ use App\Http\Controllers\Ops\RevisionController;
 use App\Http\Controllers\Purchasing\PurchaseOrderController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
 Route::get('/', function () {
     return Auth::check()
@@ -25,9 +26,7 @@ Route::get('/', function () {
 })->name('home');
 
 Route::middleware(['auth'])->group(function () {
-    Route::get('dashboard', function () {
-        return Inertia::render('dashboard');
-    })->name('dashboard');
+    Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::prefix('dapur')->name('dapur.')->middleware('permission:orders.manage')->group(function () {
         Route::resource('orders', OrderController::class)
@@ -35,7 +34,9 @@ Route::middleware(['auth'])->group(function () {
         Route::post('orders/{order}/stt', [OrderController::class, 'submitStt'])->name('orders.stt');
         Route::patch('orders/{order}/items/{orderItem}', [OrderController::class, 'updateItem'])->name('orders.items.update');
         Route::delete('orders/{order}/items/{orderItem}', [OrderController::class, 'destroyItem'])->name('orders.items.destroy');
-        Route::get('orders/{order}/surat-jalan/{suratJalan}/tanda-terima', [OrderController::class, 'downloadTandaTerima'])
+        Route::get('orders/{order}/surat-jalan/download', [OrderController::class, 'downloadSuratJalan'])
+            ->name('orders.surat-jalan.download');
+        Route::get('orders/{order}/tanda-terima/download', [OrderController::class, 'downloadTandaTerima'])
             ->name('orders.tanda-terima.download');
     });
 
@@ -84,6 +85,7 @@ Route::middleware(['auth'])->group(function () {
                 ->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}')
                 ->name('invoices.by-date');
             Route::get('invoices/{invoice}/download', [InvoiceController::class, 'download'])->name('invoices.download');
+            Route::post('invoices/{invoice}/pay', [InvoiceController::class, 'pay'])->name('invoices.pay');
         });
 
         // Checker: a separate permission from the Maker's invoices.manage, so
@@ -91,6 +93,22 @@ Route::middleware(['auth'])->group(function () {
         Route::middleware('permission:invoices.approve')->group(function () {
             Route::post('invoices/{invoice}/approve', [InvoiceController::class, 'approve'])->name('invoices.approve');
             Route::post('invoices/{invoice}/reject', [InvoiceController::class, 'reject'])->name('invoices.reject');
+        });
+
+        // Accounts Payable — same maker-checker shape as invoices, billing the
+        // Supplier instead of the Dapur.
+        Route::middleware('permission:supplier-bills.manage')->group(function () {
+            Route::resource('supplier-bills', SupplierBillController::class)
+                ->only(['index', 'store']);
+            Route::get('supplier-bills/tanggal/{date}', [SupplierBillController::class, 'byDate'])
+                ->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}')
+                ->name('supplier-bills.by-date');
+            Route::post('supplier-bills/{supplierBill}/pay', [SupplierBillController::class, 'pay'])->name('supplier-bills.pay');
+        });
+
+        Route::middleware('permission:supplier-bills.approve')->group(function () {
+            Route::post('supplier-bills/{supplierBill}/approve', [SupplierBillController::class, 'approve'])->name('supplier-bills.approve');
+            Route::post('supplier-bills/{supplierBill}/reject', [SupplierBillController::class, 'reject'])->name('supplier-bills.reject');
         });
     });
 
