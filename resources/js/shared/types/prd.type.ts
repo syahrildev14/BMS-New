@@ -271,3 +271,11 @@ export interface AppUser {
   dapur?: Dapur | null;
   supplier?: Supplier | null;
 }
+
+export interface Backup {
+  id: number;
+  filename: string;
+  size_bytes: number;
+  created_at: string;
+  creator: { id: number; name: string } | null;
+}
