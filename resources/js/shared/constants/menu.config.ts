@@ -89,6 +89,7 @@ export const menuConfig: MenuItem[] = [
       { label: 'Role & Permission', href: '/admin/roles', permission: 'roles.manage' },
       { label: 'Pengguna', href: '/admin/users', permission: 'users.manage' },
       { label: 'Backup Data', href: '/admin/backups', permission: 'system.backup.manage' },
+      { label: 'Log Aktivitas', href: '/admin/audit-logs', permission: 'system.audit-log.view' },
     ],
   },
 ];
