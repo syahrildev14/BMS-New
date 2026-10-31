@@ -22,7 +22,7 @@ class BackupService
     public function create(User $user): Backup
     {
         $driver = config('database.default');
-        $timestamp = now()->format('Y-m-d_His') . '_' . uniqid();
+        $timestamp = now()->format('Y-m-d_His').'_'.uniqid();
 
         $diskPath = match ($driver) {
             'sqlite' => $this->dumpSqlite($timestamp),
@@ -57,7 +57,7 @@ class BackupService
         // Use a separate PDO connection to avoid interfering with Laravel's transaction management.
         $dbPath = config('database.connections.sqlite.database');
         $pdo = new \PDO("sqlite:{$dbPath}");
-        $pdo->exec('VACUUM INTO ' . $pdo->quote($absolutePath));
+        $pdo->exec('VACUUM INTO '.$pdo->quote($absolutePath));
         unset($pdo);
 
         return $diskPath;
