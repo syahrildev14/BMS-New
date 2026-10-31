@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\SupplierBill;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Accounts Payable mirror of SplitInvoiceService: reconciles the same
@@ -25,22 +26,60 @@ class SupplierBillService
     public function generateBillsForOrder(Order $order): Collection
     {
         return DB::transaction(function () use ($order) {
-            $orderItems = $order->orderItems()->whereNotNull('qty_received')->with('supplier')->get();
+            $pendingSttCount = $order->orderItems()
+                ->whereNotNull('surat_jalan_id')
+                ->whereNull('qty_received')
+                ->count();
+
+            abort_if(
+                $pendingSttCount > 0,
+                422,
+                "Tidak bisa generate bill: {$pendingSttCount} item yang sudah dikirim (Surat Jalan) belum diinput STT (qty_received) oleh Dapur."
+            );
+
+            $orderItems = $order->orderItems()->whereNotNull('qty_received')->with(['supplier', 'item'])->get();
+
+            // Same reasoning as SplitInvoiceService::generateInvoicesForOrder():
+            // WET_GOODS only gets final_cost_price from a daily price synced
+            // for this Order's exact delivery_date — if that hasn't happened
+            // yet, billing (qty * null) would silently compute 0.
+            $unpriced = $orderItems->whereNull('final_cost_price');
+
+            if ($unpriced->isNotEmpty()) {
+                $dateStr = $order->delivery_date->toDateString();
+
+                throw ValidationException::withMessages([
+                    'order_id' => "Tidak bisa generate bill: {$unpriced->count()} item belum punya final_cost_price. Purchasing belum input Harga Harian untuk tanggal pengiriman Order ini ({$dateStr}).",
+                    'unpriced_date' => $dateStr,
+                    'unpriced_items' => $unpriced->pluck('item.name')->implode(', '),
+                ]);
+            }
             $groupedItems = $orderItems->groupBy('supplier_id');
             $bills = collect();
 
             foreach ($groupedItems as $supplierId => $items) {
                 $existing = SupplierBill::where('order_id', $order->id)->where('supplier_id', $supplierId)->first();
 
+                $totalAmount = $items->sum(function ($item) {
+                    return ((float) $item->qty_received - (float) $item->qty_rejected) * $item->final_cost_price;
+                });
+
                 if ($existing && $existing->status === 'ISSUED') {
+                    // Same reasoning as SplitInvoiceService::generateInvoicesForOrder():
+                    // a late add-on Surat Jalan STT-ed after this bill was
+                    // already approved must not be silently dropped.
+                    abort_if(
+                        round($totalAmount, 2) !== round((float) $existing->total_amount, 2),
+                        422,
+                        "Bill {$existing->bill_number} sudah ISSUED, tapi ada perubahan kuantitas tertagih (kemungkinan Surat Jalan susulan yang baru di-STT) untuk supplier ini — total baru ".
+                            number_format($totalAmount, 2).' vs bill yang sudah terbit '.number_format((float) $existing->total_amount, 2).
+                            '. Bill yang sudah ISSUED tidak ditimpa otomatis — butuh bill/penyesuaian susulan secara manual.'
+                    );
+
                     $bills->push($existing);
 
                     continue;
                 }
-
-                $totalAmount = $items->sum(function ($item) {
-                    return ((float) $item->qty_received - (float) $item->qty_rejected) * $item->final_cost_price;
-                });
 
                 if ($existing) {
                     $billNumber = $existing->bill_number;

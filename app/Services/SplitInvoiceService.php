@@ -7,6 +7,9 @@ use App\Models\Invoice;
 use App\Models\Order;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * Maker-checker on billing: generateInvoicesForOrder() (Maker, Finance) only
@@ -26,18 +29,46 @@ class SplitInvoiceService
     public function generateInvoicesForOrder(Order $order): Collection
     {
         return DB::transaction(function () use ($order) {
-            $orderItems = $order->orderItems()->whereNotNull('qty_received')->with('supplier')->get();
+            $pendingSttCount = $order->orderItems()
+                ->whereNotNull('surat_jalan_id')
+                ->whereNull('qty_received')
+                ->count();
+
+            abort_if(
+                $pendingSttCount > 0,
+                422,
+                "Tidak bisa generate invoice: {$pendingSttCount} item yang sudah dikirim (Surat Jalan) belum diinput STT (qty_received) oleh Dapur."
+            );
+
+            $orderItems = $order->orderItems()->whereNotNull('qty_received')->with(['supplier', 'item'])->get();
+
+            // WET_GOODS only gets final_selling_price from
+            // PricingEngineService syncing a daily price entered for this
+            // Order's exact delivery_date — if Purchasing hasn't entered
+            // that date's price yet, the column stays null. Billing
+            // (qty * null) silently computes 0 instead of erroring, so this
+            // must be checked explicitly rather than relying on the
+            // arithmetic to fail loudly on its own.
+            $unpriced = $orderItems->whereNull('final_selling_price');
+
+            if ($unpriced->isNotEmpty()) {
+                $dateStr = $order->delivery_date->toDateString();
+
+                // Structured per-field errors (not one squished sentence) so
+                // the Finance UI can render a proper alert with a bullet
+                // list of item names, instead of a raw exception leaking to
+                // the browser as a bare Laravel error page.
+                throw ValidationException::withMessages([
+                    'order_id' => "Tidak bisa generate invoice: {$unpriced->count()} item belum punya final_selling_price. Purchasing belum input Harga Harian untuk tanggal pengiriman Order ini ({$dateStr}).",
+                    'unpriced_date' => $dateStr,
+                    'unpriced_items' => $unpriced->pluck('item.name')->implode(', '),
+                ]);
+            }
             $groupedItems = $orderItems->groupBy('supplier_id');
             $invoices = collect();
 
             foreach ($groupedItems as $supplierId => $items) {
                 $existing = Invoice::where('order_id', $order->id)->where('supplier_id', $supplierId)->first();
-
-                if ($existing && $existing->status === 'ISSUED') {
-                    $invoices->push($existing);
-
-                    continue;
-                }
 
                 // Only quantity that actually passed QC is billable (PRD
                 // §Module 4 Reconciled Split Billing) — qty_rejected must be
@@ -45,6 +76,26 @@ class SplitInvoiceService
                 $totalAmount = $items->sum(function ($item) {
                     return ((float) $item->qty_received - (float) $item->qty_rejected) * $item->final_selling_price;
                 });
+
+                if ($existing && $existing->status === 'ISSUED') {
+                    // A later add-on Surat Jalan (PRD §Module 3) for this
+                    // same Order+Supplier can get STT-ed after this invoice
+                    // was already approved — silently `continue`-ing here
+                    // would permanently drop that amount from any invoice.
+                    // Fail loudly instead so Finance has to handle the
+                    // adjustment, rather than losing it unnoticed.
+                    abort_if(
+                        round($totalAmount, 2) !== round((float) $existing->total_amount, 2),
+                        422,
+                        "Invoice {$existing->invoice_number} sudah ISSUED, tapi ada perubahan kuantitas tertagih (kemungkinan Surat Jalan susulan yang baru di-STT) untuk supplier ini — total baru ".
+                            number_format($totalAmount, 2).' vs invoice yang sudah terbit '.number_format((float) $existing->total_amount, 2).
+                            '. Invoice yang sudah ISSUED tidak ditimpa otomatis — butuh invoice/penyesuaian susulan secara manual.'
+                    );
+
+                    $invoices->push($existing);
+
+                    continue;
+                }
 
                 // Keep a re-generated invoice's original number untouched;
                 // only mint a new one (with a per-dapur/supplier/day sequence,
@@ -102,12 +153,49 @@ class SplitInvoiceService
                 'due_date' => now()->addDays((int) config('finance.invoice_due_days'))->toDateString(),
             ]);
 
-            $order = $invoice->order;
+            // Locked so two invoices under the same Order being approved at
+            // nearly the same time can't both read "the other one isn't
+            // ISSUED yet" and leave the Order stuck un-COMPLETED forever —
+            // the second approval waits for the first to commit, then sees
+            // its update.
+            $order = Order::where('id', $invoice->order_id)->lockForUpdate()->first();
 
             if ($order->invoices()->where('status', '!=', 'ISSUED')->doesntExist()) {
                 $order->update(['status' => 'COMPLETED']);
             }
         });
+
+        // The invoice is already officially ISSUED at this point (committed
+        // above) — a PDF render failure (template error, disk full, etc.) is
+        // a secondary-artifact problem, not a reason to make this request
+        // blow up with a 500 while leaving the caller unsure whether the
+        // approval itself went through. Log it and let Finance regenerate
+        // later; see InvoiceController::regeneratePdf().
+        try {
+            GenerateInvoicePdfJob::dispatchSync($invoice->id);
+        } catch (Throwable $e) {
+            Log::error('Gagal generate PDF invoice setelah approve.', [
+                'invoice_id' => $invoice->id,
+                'exception' => $e,
+            ]);
+        }
+
+        return $invoice->refresh();
+    }
+
+    /**
+     * Retry PDF rendering for an already-ISSUED invoice whose pdf_url never
+     * got set (see approveInvoice()'s try/catch) — the only way to recover
+     * without a direct DB/Tinker fix, since download() 404s without a
+     * pdf_url and approve() itself only runs once per invoice (DRAFT-only).
+     */
+    public function regeneratePdf(Invoice $invoice): Invoice
+    {
+        abort_unless(
+            in_array($invoice->status, ['ISSUED', 'OVERDUE', 'PAID'], true),
+            422,
+            'Hanya invoice yang sudah ISSUED/OVERDUE/PAID yang PDF-nya bisa di-generate ulang.'
+        );
 
         GenerateInvoicePdfJob::dispatchSync($invoice->id);
 

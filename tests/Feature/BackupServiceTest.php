@@ -16,17 +16,6 @@ it('creates a sqlite backup file and a matching Backup row', function () {
     expect(Storage::disk('local')->exists($backup->disk_path))->toBeTrue();
 });
 
-it('deletes both the physical file and the Backup row', function () {
-    $user = User::factory()->create();
-    $backup = app(BackupService::class)->create($user);
-    $path = $backup->disk_path;
-
-    app(BackupService::class)->delete($backup);
-
-    expect(Storage::disk('local')->exists($path))->toBeFalse();
-    expect(Backup::find($backup->id))->toBeNull();
-});
-
 it('refuses to back up an unsupported database driver', function () {
     // Create the user BEFORE switching the default connection — otherwise
     // this query itself fails to connect, before ever reaching the

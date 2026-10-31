@@ -88,14 +88,17 @@ Route::middleware(['auth'])->group(function () {
                 ->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}')
                 ->name('invoices.by-date');
             Route::get('invoices/{invoice}/download', [InvoiceController::class, 'download'])->name('invoices.download');
-            Route::post('invoices/{invoice}/pay', [InvoiceController::class, 'pay'])->name('invoices.pay');
+            Route::post('invoices/{invoice}/regenerate-pdf', [InvoiceController::class, 'regeneratePdf'])->name('invoices.regenerate-pdf');
         });
 
         // Checker: a separate permission from the Maker's invoices.manage, so
-        // approval can be restricted to a different user/role (maker-checker).
+        // approval AND marking as paid can be restricted to a different
+        // user/role (maker-checker) — "money has actually moved" is a
+        // checker-level action, not something the Maker should self-certify.
         Route::middleware('permission:invoices.approve')->group(function () {
             Route::post('invoices/{invoice}/approve', [InvoiceController::class, 'approve'])->name('invoices.approve');
             Route::post('invoices/{invoice}/reject', [InvoiceController::class, 'reject'])->name('invoices.reject');
+            Route::post('invoices/{invoice}/pay', [InvoiceController::class, 'pay'])->name('invoices.pay');
         });
 
         // Accounts Payable — same maker-checker shape as invoices, billing the
@@ -106,12 +109,12 @@ Route::middleware(['auth'])->group(function () {
             Route::get('supplier-bills/tanggal/{date}', [SupplierBillController::class, 'byDate'])
                 ->where('date', '[0-9]{4}-[0-9]{2}-[0-9]{2}')
                 ->name('supplier-bills.by-date');
-            Route::post('supplier-bills/{supplierBill}/pay', [SupplierBillController::class, 'pay'])->name('supplier-bills.pay');
         });
 
         Route::middleware('permission:supplier-bills.approve')->group(function () {
             Route::post('supplier-bills/{supplierBill}/approve', [SupplierBillController::class, 'approve'])->name('supplier-bills.approve');
             Route::post('supplier-bills/{supplierBill}/reject', [SupplierBillController::class, 'reject'])->name('supplier-bills.reject');
+            Route::post('supplier-bills/{supplierBill}/pay', [SupplierBillController::class, 'pay'])->name('supplier-bills.pay');
         });
     });
 
@@ -138,12 +141,9 @@ Route::middleware(['auth'])->group(function () {
             ->only(['index', 'store', 'update', 'destroy'])
             ->middleware('permission:dapurs.manage');
 
-        Route::prefix('backups')->name('backups.')->middleware('permission:system.backup.manage')->group(function () {
-            Route::get('/', [BackupController::class, 'index'])->name('index');
-            Route::post('/', [BackupController::class, 'store'])->name('store');
-            Route::get('{backup}/download', [BackupController::class, 'download'])->name('download');
-            Route::delete('{backup}', [BackupController::class, 'destroy'])->name('destroy');
-        });
+        Route::post('backups/export', [BackupController::class, 'export'])
+            ->middleware('permission:system.backup.manage')
+            ->name('backups.export');
 
         Route::get('audit-logs', [AuditLogController::class, 'index'])
             ->middleware('permission:system.audit-log.view')
@@ -151,5 +151,5 @@ Route::middleware(['auth'])->group(function () {
     });
 });
 
-require __DIR__ . '/settings.php';
-require __DIR__ . '/auth.php';
+require __DIR__.'/settings.php';
+require __DIR__.'/auth.php';

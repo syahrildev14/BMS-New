@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
-import { ChevronDown, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Settings, Sun } from 'lucide-react'; //icons
+import { ChevronDown, DatabaseBackup, Loader2, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Settings, Sun } from 'lucide-react'; //icons
 import { useAppearance } from '@/hooks/use-appearance';
 import { menuConfig } from '@/shared/constants/menu.config';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/shared/components/ui/collapsible';
@@ -16,10 +16,17 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/shar
 import { UserAvatar } from '@/shared/components/ui/avatar';
 import { useMediaQuery } from '@/shared/hooks/use-media-query';
 import { cn } from '@/shared/lib/utils';
-import { successAlert, errorAlert, confirmLogout } from '@/shared/lib/alerts';
+import { successAlert, errorAlert, confirmLogout, confirmBackup } from '@/shared/lib/alerts';
 import type { AppUser } from '@/shared/types/prd.type';
 
 const SIDEBAR_COLLAPSED_KEY = 'bms-sidebar-collapsed';
+
+/**
+ * Lazy-loaded: pulls in lottie-react + a ~350KB animation JSON. Code-split
+ * into its own chunk so pages never pay for it unless the sidebar actually
+ * renders the backup button (gated by the system.backup.manage permission).
+ */
+const BackupSidebarAnimation = lazy(() => import('@/shared/components/BackupSidebarAnimation'));
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -39,6 +46,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { url, props } = usePage<FlashProps>();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [backingUp, setBackingUp] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
@@ -80,40 +88,74 @@ export function AppLayout({ children }: AppLayoutProps) {
     if (confirmed) router.post(route('logout'));
   };
 
+  const handleBackup = async () => {
+    const confirmed = await confirmBackup();
+    if (!confirmed) return;
+
+    setBackingUp(true);
+    try {
+      const xsrfToken = decodeURIComponent(document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/)?.[1] ?? '');
+      const response = await fetch(route('admin.backups.export'), {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-XSRF-TOKEN': xsrfToken },
+      });
+
+      if (!response.ok) throw new Error('Backup request failed');
+
+      const disposition = response.headers.get('Content-Disposition') ?? '';
+      const filename = disposition.match(/filename="?([^";]+)"?/)?.[1] ?? 'backup';
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(blobUrl);
+
+      successAlert('Backup berhasil dibuat dan diunduh.');
+    } catch {
+      errorAlert('Gagal membuat backup. Silakan coba lagi.');
+    } finally {
+      setBackingUp(false);
+    }
+  };
+
   return (
     <TooltipProvider delayDuration={150}>
       <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950">
         {/* Sidebar */}
         <aside
           className={cn(
-            'fixed inset-y-0 left-0 z-40 w-64 transform overflow-y-auto border-r border-gray-200 bg-white transition-all duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:self-start dark:border-gray-800 dark:bg-gray-900',
+            'fixed inset-y-0 left-0 z-40 flex w-64 transform flex-col overflow-hidden border-r border-gray-200 bg-white transition-all duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:self-start dark:border-gray-800 dark:bg-gray-900',
             sidebarOpen ? 'translate-x-0' : '-translate-x-full',
             collapsed && 'lg:w-16',
           )}
         >
-          <div className={cn('flex h-16 items-center gap-2 border-b border-gray-100 px-5 dark:border-gray-800', collapsed && 'lg:justify-center lg:px-0')}>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground shadow-sm">
-              B
-            </div>
+          <div className={cn('flex h-16 shrink-0 items-center gap-2 border-b border-gray-100 px-5 dark:border-gray-800', collapsed && 'lg:justify-center lg:px-0')}>
+            {isDesktop ? (
+              <button
+                type="button"
+                onClick={toggleCollapsed}
+                title={collapsed ? 'Perluas sidebar' : 'Perkecil sidebar'}
+                className="group flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+              >
+                <span className="group-hover:hidden">B</span>
+                {collapsed ? (
+                  <PanelLeftOpen className="hidden h-4 w-4 group-hover:block" />
+                ) : (
+                  <PanelLeftClose className="hidden h-4 w-4 group-hover:block" />
+                )}
+              </button>
+            ) : (
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground shadow-sm">
+                B
+              </div>
+            )}
             <span className={cn('font-semibold text-gray-900 dark:text-gray-100', collapsed && 'lg:hidden')}>Sistem BMS</span>
           </div>
 
-          <div
-            className={cn(
-              'hidden items-center border-b border-gray-100 px-3 py-2 lg:flex dark:border-gray-800',
-              collapsed ? 'lg:justify-center' : 'lg:justify-end',
-            )}
-          >
-            <button
-              type="button"
-              onClick={toggleCollapsed}
-              className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-            >
-              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-            </button>
-          </div>
-
-          <nav className="flex flex-col gap-1 p-3">
+          <nav className="themed-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
             {visibleMenu.map((item) => {
               const Icon = item.icon;
 
@@ -222,6 +264,52 @@ export function AppLayout({ children }: AppLayoutProps) {
               );
             })}
           </nav>
+
+          {can('system.backup.manage') && (
+            <div
+              className={cn(
+                'mx-3 mb-3 mt-2 shrink-0 rounded-lg border border-gray-100 bg-gray-50 py-2 dark:border-gray-800 dark:bg-gray-800/50',
+                showCollapsedUI ? 'px-0' : 'px-2',
+              )}
+            >
+              {!showCollapsedUI && (
+                <Suspense fallback={null}>
+                  <BackupSidebarAnimation />
+                </Suspense>
+              )}
+              {(() => {
+                const button = (
+                  <button
+                    type="button"
+                    onClick={handleBackup}
+                    disabled={backingUp}
+                    className={cn(
+                      'flex w-full items-center gap-3 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60',
+                      collapsed && 'lg:justify-center lg:px-0',
+                    )}
+                  >
+                    {backingUp ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                    ) : (
+                      <DatabaseBackup className="h-4 w-4 shrink-0" />
+                    )}
+                    <span className={cn(collapsed && 'lg:hidden')}>{backingUp ? 'Membuat backup...' : 'Backup Data'}</span>
+                  </button>
+                );
+
+                if (!showCollapsedUI) return button;
+
+                return (
+                  <Tooltip>
+                    <TooltipTrigger asChild>{button}</TooltipTrigger>
+                    <TooltipContent side="right" className="hidden lg:block">
+                      Backup Data
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })()}
+            </div>
+          )}
         </aside>
 
         {/* Overlay mobile */}

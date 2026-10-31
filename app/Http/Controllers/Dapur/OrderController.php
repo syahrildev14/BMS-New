@@ -11,6 +11,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Supplier;
 use App\Services\RevisionGateService;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -46,14 +47,7 @@ class OrderController extends Controller
         $dapurId = $request->user()->dapur_id;
         $validated = $request->validated();
 
-        $order = Order::firstOrCreate(
-            ['dapur_id' => $dapurId, 'delivery_date' => $validated['delivery_date']],
-            [
-                'order_number' => $this->generateOrderNumber($dapurId),
-                'status' => 'DRAFT',
-                'notes' => $validated['notes'] ?? null,
-            ]
-        );
+        $order = $this->findOrCreateOrderSafely($dapurId, $validated);
 
         $result = $revisionGate->submitRevision($order, $validated['items'], $request->user());
 
@@ -67,7 +61,10 @@ class OrderController extends Controller
         abort_unless($order->dapur_id === $request->user()->dapur_id, 403);
 
         return Inertia::render('dapur/orders/show', [
-            'order' => $order->load('orderItems.item', ['suratJalans' => fn ($query) => $query->orderBy('sequence_number')]),
+            'order' => $order->load([
+                'orderItems.item',
+                'suratJalans' => fn ($query) => $query->orderBy('sequence_number'),
+            ]),
             'items' => Item::with(['defaultSupplier', 'satuan'])->where('is_active', true)->get(),
             'suppliers' => Supplier::all(),
         ]);
@@ -86,8 +83,28 @@ class OrderController extends Controller
         $validated = $request->validate([
             'items' => ['required', 'array', 'min:1'],
             'items.*.id' => ['required', 'integer', 'exists:order_items,id'],
-            'items.*.qty_received' => ['required', 'numeric', 'min:0'],
-            'items.*.qty_rejected' => ['required', 'numeric', 'min:0'],
+            'items.*.qty_received' => [
+                'required', 'numeric', 'min:0',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    $index = (int) explode('.', $attribute)[1];
+                    $orderItem = OrderItem::find($request->input("items.{$index}.id"));
+
+                    if ($orderItem && (float) $value > (float) $orderItem->qty_ordered) {
+                        $fail("qty_received ({$value}) tidak boleh melebihi qty_ordered ({$orderItem->qty_ordered}).");
+                    }
+                },
+            ],
+            'items.*.qty_rejected' => [
+                'required', 'numeric', 'min:0',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    $index = (int) explode('.', $attribute)[1];
+                    $qtyReceived = (float) $request->input("items.{$index}.qty_received");
+
+                    if ((float) $value > $qtyReceived) {
+                        $fail("qty_rejected ({$value}) tidak boleh melebihi qty_received ({$qtyReceived}).");
+                    }
+                },
+            ],
             'items.*.rejection_reason' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -155,7 +172,7 @@ class OrderController extends Controller
 
         return back()->with(
             'success',
-            count($validated['items']) . " item ditambahkan (tier: {$result['tier']})."
+            count($validated['items'])." item ditambahkan (tier: {$result['tier']})."
         );
     }
 
@@ -166,7 +183,7 @@ class OrderController extends Controller
 
         return Storage::disk('local')->download(
             $order->pdf_url,
-            'Surat-Jalan-' . str_replace('/', '-', $order->order_number) . '.pdf'
+            'Surat-Jalan-'.str_replace('/', '-', $order->order_number).'.pdf'
         );
     }
 
@@ -177,7 +194,7 @@ class OrderController extends Controller
 
         return Storage::disk('local')->download(
             $order->tanda_terima_pdf_url,
-            'Tanda-Terima-' . str_replace('/', '-', $order->order_number) . '.pdf'
+            'Tanda-Terima-'.str_replace('/', '-', $order->order_number).'.pdf'
         );
     }
 
@@ -231,5 +248,53 @@ class OrderController extends Controller
             ->count() + 1;
 
         return sprintf('ORD/%s/%s/%02d', $today->format('Ymd'), $dapurId, $sequence);
+    }
+
+    /**
+     * One Order per (dapur_id, delivery_date) is enforced by a DB unique
+     * constraint, but the "does it already exist?" read and the "create it"
+     * write are two separate statements — two concurrent submissions for the
+     * same Dapur+date (double-click, retried request) can both read "not
+     * found" before either commits. Re-checking for the existing row and
+     * retrying order_number generation on a duplicate-key error (same
+     * approach as PurchaseOrderService::createPurchaseOrderWithUniqueNumber)
+     * means the loser of that race ends up reusing the winner's Order
+     * instead of crashing with an uncaught QueryException.
+     */
+    private function findOrCreateOrderSafely(int $dapurId, array $validated): Order
+    {
+        $maxAttempts = 5;
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            $existing = Order::where('dapur_id', $dapurId)
+                ->where('delivery_date', $validated['delivery_date'])
+                ->first();
+
+            if ($existing) {
+                return $existing;
+            }
+
+            try {
+                return Order::create([
+                    'dapur_id' => $dapurId,
+                    'delivery_date' => $validated['delivery_date'],
+                    'order_number' => $this->generateOrderNumber($dapurId),
+                    'status' => 'DRAFT',
+                    'notes' => $validated['notes'] ?? null,
+                ]);
+            } catch (QueryException $e) {
+                $isDuplicateKey = (int) $e->getCode() === 23000;
+
+                if (! $isDuplicateKey || $attempt === $maxAttempts) {
+                    throw $e;
+                }
+
+                // Either another request just created the same (dapur_id,
+                // delivery_date) Order, or its order_number sequence
+                // collided — loop back, re-read, and try again.
+            }
+        }
+
+        throw new \RuntimeException('Gagal membuat Order setelah beberapa percobaan.');
     }
 }

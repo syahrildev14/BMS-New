@@ -69,12 +69,51 @@ export async function confirmLogout(): Promise<boolean> {
   return result.isConfirmed;
 }
 
+export async function confirmBackup(): Promise<boolean> {
+  const result = await Swal.fire({
+    ...baseConfig,
+    icon: 'question',
+    title: 'Buat backup database sekarang?',
+    text: 'File backup akan dibuat dan langsung diunduh ke perangkat Anda.',
+    showCancelButton: true,
+    confirmButtonText: 'Ya, buat backup',
+    cancelButtonText: 'Batal',
+    reverseButtons: true,
+  });
+
+  return result.isConfirmed;
+}
+
 export function warningAlert(message: string, title = 'Perhatian') {
   return Swal.fire({
     ...baseConfig,
     icon: 'warning',
     title,
     text: message,
+    confirmButtonText: 'Mengerti',
+  });
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char);
+}
+
+/**
+ * For rejections that name a concrete list of affected records (e.g. items
+ * missing a daily price) — a bullet list reads far more professionally than
+ * squeezing everything into one run-on sentence.
+ */
+export function listAlert(message: string, items: string[], title = 'Perhatian') {
+  const listHtml = items.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+
+  return Swal.fire({
+    ...baseConfig,
+    icon: 'warning',
+    title,
+    html: `
+      <p class="text-sm text-gray-600 text-left mb-3">${escapeHtml(message)}</p>
+      <ul class="text-sm text-left list-disc list-inside space-y-1 text-gray-700">${listHtml}</ul>
+    `,
     confirmButtonText: 'Mengerti',
   });
 }

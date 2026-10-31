@@ -1,5 +1,19 @@
 <?php
 
+use App\Models\Dapur;
+use App\Models\Gudang;
+use App\Models\Item;
+use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\Satuan;
+use App\Models\StockLot;
+use App\Models\Supplier;
+use App\Models\User;
+use Carbon\Carbon;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
+use Tests\TestCase;
+
 /*
 |--------------------------------------------------------------------------
 | Test Case
@@ -11,8 +25,8 @@
 |
 */
 
-pest()->extend(Tests\TestCase::class)
-    ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
+pest()->extend(TestCase::class)
+    ->use(RefreshDatabase::class)
     ->in('Feature');
 
 /*
@@ -41,7 +55,90 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+function makeDapur(array $attrs = []): Dapur
 {
-    // ..
+    return Dapur::create(array_merge([
+        'code' => 'DPR-'.Str::random(6),
+        'name' => 'Dapur Test',
+    ], $attrs));
+}
+
+function makeSupplier(array $attrs = []): Supplier
+{
+    return Supplier::create(array_merge([
+        'code' => 'SUP-'.Str::random(6),
+        'name' => 'Supplier Test',
+    ], $attrs));
+}
+
+function makeSatuan(array $attrs = []): Satuan
+{
+    return Satuan::create(array_merge([
+        'code' => 'SAT-'.Str::random(6),
+        'name' => 'Satuan Test',
+    ], $attrs));
+}
+
+function makeGudang(array $attrs = []): Gudang
+{
+    return Gudang::create(array_merge([
+        'code' => 'GDG-'.Str::random(6),
+        'name' => 'Gudang Test',
+    ], $attrs));
+}
+
+function makeItem(array $attrs = []): Item
+{
+    return Item::create(array_merge([
+        'sku' => 'SKU-'.Str::random(8),
+        'name' => 'Item Test',
+        'category' => 'DRY_GOODS',
+        'satuan_id' => $attrs['satuan_id'] ?? makeSatuan()->id,
+        'margin_type' => 'PERCENTAGE',
+        'margin_value' => 10,
+        'base_cost_price' => 1000,
+        'base_selling_price' => 1100,
+        'is_active' => true,
+    ], $attrs));
+}
+
+function makeOrder(Dapur $dapur, array $attrs = []): Order
+{
+    return Order::create(array_merge([
+        'order_number' => 'ORD-'.Str::random(10),
+        'dapur_id' => $dapur->id,
+        'delivery_date' => now()->addDay()->toDateString(),
+        'status' => 'SUBMITTED',
+    ], $attrs));
+}
+
+function makeOrderItem(Order $order, Item $item, Supplier $supplier, array $attrs = []): OrderItem
+{
+    return OrderItem::create(array_merge([
+        'order_id' => $order->id,
+        'item_id' => $item->id,
+        'supplier_id' => $supplier->id,
+        'qty_ordered' => 10,
+        'estimated_price' => 1000,
+    ], $attrs));
+}
+
+function makeStockLot(Gudang $gudang, Item $item, float $qty, float $unitCost, ?Carbon $receivedAt = null): StockLot
+{
+    return StockLot::create([
+        'gudang_id' => $gudang->id,
+        'item_id' => $item->id,
+        'qty_received' => $qty,
+        'qty_remaining' => $qty,
+        'unit_cost' => $unitCost,
+        'received_at' => $receivedAt ?? now(),
+    ]);
+}
+
+function makeUserWithRole(string $role, array $attrs = []): User
+{
+    $user = User::factory()->create($attrs);
+    $user->assignRole($role);
+
+    return $user;
 }

@@ -48,7 +48,7 @@ class RevisionGateService
 
     /**
      * @param  array<int, array{item_id: int, supplier_id: int, qty_ordered: float, estimated_price: float}>  $itemsPayload
-     * @return array{tier: string, order_items: \Illuminate\Support\Collection}
+     * @return array{tier: string, order_items: Collection}
      */
     public function submitRevision(Order $order, array $itemsPayload, User $user, ?Carbon $now = null): array
     {
@@ -131,6 +131,13 @@ class RevisionGateService
     {
         return DB::transaction(function () use ($pendingLog, $opsUser) {
             $itemIds = collect($pendingLog->new_data['items'] ?? [])->pluck('id');
+
+            if (OrderItem::whereIn('id', $itemIds)->whereNotNull('surat_jalan_id')->exists()) {
+                throw new \RuntimeException(
+                    'Tidak bisa menolak revisi ini: sebagian item sudah terbit di Surat Jalan.'
+                );
+            }
+
             OrderItem::whereIn('id', $itemIds)->delete();
 
             return $this->resolve($pendingLog, $opsUser, 'ORDER_REVISION_REJECTED');

@@ -92,7 +92,14 @@ class InvoiceController extends Controller
 
         return Storage::disk('local')->download(
             $invoice->pdf_url,
-            str_replace('/', '-', $invoice->invoice_number) . '.pdf'
+            str_replace('/', '-', $invoice->invoice_number).'.pdf'
         );
+    }
+
+    public function regeneratePdf(Invoice $invoice, SplitInvoiceService $service): RedirectResponse
+    {
+        $service->regeneratePdf($invoice);
+
+        return back()->with('success', "PDF invoice {$invoice->invoice_number} berhasil dibuat ulang.");
     }
 }

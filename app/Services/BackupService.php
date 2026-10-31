@@ -40,12 +40,6 @@ class BackupService
         ]);
     }
 
-    public function delete(Backup $backup): void
-    {
-        Storage::disk('local')->delete($backup->disk_path);
-        $backup->delete();
-    }
-
     private function dumpSqlite(string $timestamp): string
     {
         $diskPath = "backups/backup_{$timestamp}.sqlite";

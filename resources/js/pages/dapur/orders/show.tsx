@@ -304,28 +304,6 @@ export default function DapurOrdersShow({ order, items, suppliers }: { order: Or
               <p className="text-sm text-gray-600 dark:text-gray-300">
                 {(order.surat_jalans ?? []).length} pengiriman: {(order.surat_jalans ?? []).map((sj) => sj.sj_number).join(', ')}
               </p>
-              <p className="text-xs text-gray-400">
-                Dokumen berikut digabung otomatis untuk seluruh pengiriman pada order ini — tidak perlu download satu-satu per SJ.
-              </p>
-              <div className="flex gap-4">
-                {order.pdf_url ? (
-                  <a href={route('dapur.orders.surat-jalan.download', order.id)} className="text-sm font-medium text-blue-600 hover:underline">
-                    Download Surat Jalan
-                  </a>
-                ) : (
-                  <span className="text-sm text-gray-400">Surat Jalan belum tersedia</span>
-                )}
-                {order.tanda_terima_pdf_url ? (
-                  <a
-                    href={route('dapur.orders.tanda-terima.download', order.id)}
-                    className="text-sm font-medium text-emerald-600 hover:underline"
-                  >
-                    Download Tanda Terima
-                  </a>
-                ) : (
-                  <span className="text-sm text-gray-400">Tanda Terima belum tersedia</span>
-                )}
-              </div>
             </div>
           )}
         </div>

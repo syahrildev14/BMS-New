@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { TablePagination } from '@/shared/components/ui/table-pagination';
 import { TableSearchInput } from '@/shared/components/ui/table-search-input';
 import { useTableControls, type TableColumn } from '@/shared/hooks/use-table-controls';
-import { errorAlert } from '@/shared/lib/alerts';
+import { errorAlert, listAlert } from '@/shared/lib/alerts';
 import { formatRupiah } from '@/shared/lib/format';
 import type { Order } from '@/shared/types/prd.type';
 
@@ -47,7 +47,18 @@ export default function FinanceSupplierBillsIndex({ groups, billableOrders }: { 
       {
         onFinish: () => setProcessing(false),
         onSuccess: () => setOrderId(''),
-        onError: (errors) => errorAlert(Object.values(errors)[0] ?? 'Gagal menerbitkan bill.'),
+        onError: (errors) => {
+          if (errors.unpriced_items) {
+            listAlert(
+              errors.order_id ?? 'Sebagian item belum punya harga.',
+              errors.unpriced_items.split(', '),
+              'Harga Harian Belum Diinput',
+            );
+            return;
+          }
+
+          errorAlert(Object.values(errors)[0] ?? 'Gagal menerbitkan bill.');
+        },
       },
     );
   };
