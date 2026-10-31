@@ -33,6 +33,8 @@ class RoleAndPermissionSeeder extends Seeder
             'satuans.manage',
             'purchase-orders.manage',
             'stock.manage',
+            'system.backup.manage',
+            'system.audit-log.view',
         ];
 
         foreach ($permissions as $permission) {

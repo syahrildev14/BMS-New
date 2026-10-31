@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\DapurController;
 use App\Http\Controllers\Admin\ItemController;
 use App\Http\Controllers\Admin\PricingController;
@@ -135,6 +136,13 @@ Route::middleware(['auth'])->group(function () {
         Route::resource('dapurs', DapurController::class)
             ->only(['index', 'store', 'update', 'destroy'])
             ->middleware('permission:dapurs.manage');
+
+        Route::prefix('backups')->name('backups.')->middleware('permission:system.backup.manage')->group(function () {
+            Route::get('/', [BackupController::class, 'index'])->name('index');
+            Route::post('/', [BackupController::class, 'store'])->name('store');
+            Route::get('{backup}/download', [BackupController::class, 'download'])->name('download');
+            Route::delete('{backup}', [BackupController::class, 'destroy'])->name('destroy');
+        });
     });
 });
 
