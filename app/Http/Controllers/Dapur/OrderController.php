@@ -68,6 +68,8 @@ class OrderController extends Controller
 
         return Inertia::render('dapur/orders/show', [
             'order' => $order->load('orderItems.item', ['suratJalans' => fn ($query) => $query->orderBy('sequence_number')]),
+            'items' => Item::with(['defaultSupplier', 'satuan'])->where('is_active', true)->get(),
+            'suppliers' => Supplier::all(),
         ]);
     }
 

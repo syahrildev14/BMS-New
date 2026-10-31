@@ -1,14 +1,16 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { AppLayout } from '@/layouts/AppLayout';
 import { PageHeader } from '@/shared/components/layout/PageHeader';
 import { Button } from '@/shared/components/ui/button';
+import { Combobox } from '@/shared/components/ui/combobox';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog';
 import { Input } from '@/shared/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table';
 import { confirmDelete, errorAlert } from '@/shared/lib/alerts';
 import { formatQty, formatRupiah } from '@/shared/lib/format';
-import type { Order } from '@/shared/types/prd.type';
+import type { Item, Order, Supplier } from '@/shared/types/prd.type';
 
 interface SttLine {
   id: number;
@@ -17,7 +19,21 @@ interface SttLine {
   rejection_reason: string;
 }
 
-export default function DapurOrdersShow({ order }: { order: Order }) {
+interface NewItemLine {
+  key: number;
+  item_id: string;
+  supplier_id: string;
+  qty_ordered: string;
+  estimated_price: string;
+}
+
+let nextNewItemKey = 1;
+
+function emptyNewItemLine(): NewItemLine {
+  return { key: nextNewItemKey++, item_id: '', supplier_id: '', qty_ordered: '', estimated_price: '' };
+}
+
+export default function DapurOrdersShow({ order, items, suppliers }: { order: Order; items: Item[]; suppliers: Supplier[] }) {
   const sttEligible = (order.order_items ?? []).filter((oi) => oi.surat_jalan_id !== null);
 
   const [lines, setLines] = useState<SttLine[]>(
@@ -38,6 +54,55 @@ export default function DapurOrdersShow({ order }: { order: Order }) {
   );
   const [savingQtyId, setSavingQtyId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const [addItemOpen, setAddItemOpen] = useState(false);
+  const [newLines, setNewLines] = useState<NewItemLine[]>([emptyNewItemLine()]);
+  const [addingItems, setAddingItems] = useState(false);
+
+  const openAddItem = () => {
+    setNewLines([emptyNewItemLine()]);
+    setAddItemOpen(true);
+  };
+
+  const updateNewLine = (key: number, patch: Partial<NewItemLine>) => {
+    setNewLines((prev) => prev.map((line) => (line.key === key ? { ...line, ...patch } : line)));
+  };
+
+  const onPickNewItem = (key: number, itemId: string) => {
+    const item = items.find((i) => String(i.id) === itemId);
+    updateNewLine(key, {
+      item_id: itemId,
+      supplier_id: item?.default_supplier_id ? String(item.default_supplier_id) : '',
+      estimated_price: item?.base_selling_price ?? '',
+    });
+  };
+
+  const addNewLine = () => setNewLines((prev) => [...prev, emptyNewItemLine()]);
+  const removeNewLine = (key: number) => setNewLines((prev) => prev.filter((line) => line.key !== key));
+
+  const submitAddItems = () => {
+    const payload = newLines
+      .filter((line) => line.item_id && line.supplier_id && line.qty_ordered)
+      .map((line) => ({
+        item_id: Number(line.item_id),
+        supplier_id: Number(line.supplier_id),
+        qty_ordered: Number(line.qty_ordered),
+        estimated_price: Number(line.estimated_price || 0),
+      }));
+
+    if (payload.length === 0) return;
+
+    setAddingItems(true);
+    router.post(
+      route('dapur.orders.items.store', order.id),
+      { items: payload },
+      {
+        onSuccess: () => setAddItemOpen(false),
+        onFinish: () => setAddingItems(false),
+        onError: (errors) => errorAlert(Object.values(errors)[0] ?? 'Gagal menambah item.'),
+      },
+    );
+  };
 
   const updateLine = (id: number, patch: Partial<SttLine>) => {
     setLines((prev) => prev.map((line) => (line.id === id ? { ...line, ...patch } : line)));
@@ -97,7 +162,15 @@ export default function DapurOrdersShow({ order }: { order: Order }) {
 
       <div className="flex flex-col gap-8">
         <div>
-          <h2 className="mb-2 text-sm font-semibold text-gray-700">Item Dipesan</h2>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-700">Item Dipesan</h2>
+            {order.status !== 'CANCELLED' && order.status !== 'COMPLETED' && (
+              <Button type="button" variant="outline" size="sm" onClick={openAddItem}>
+                <Plus className="h-4 w-4" />
+                Tambah Item
+              </Button>
+            )}
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -261,6 +334,94 @@ export default function DapurOrdersShow({ order }: { order: Order }) {
           &larr; Kembali ke daftar order
         </Link>
       </div>
+
+      <Dialog open={addItemOpen} onOpenChange={setAddItemOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Tambah Item ke Order</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-3">
+            {newLines.map((line) => {
+              const selectedItem = items.find((i) => String(i.id) === line.item_id);
+
+              return (
+                <div key={line.key} className="grid grid-cols-12 items-end gap-2 border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
+                  <div className="col-span-4 flex flex-col gap-1">
+                    <label className="text-xs font-medium text-gray-700">Item</label>
+                    <Combobox
+                      value={line.item_id}
+                      onValueChange={(v) => onPickNewItem(line.key, v)}
+                      placeholder="Ketik untuk cari item..."
+                      emptyText="Item tidak ditemukan."
+                      options={items.map((item) => ({ value: String(item.id), label: `${item.name} (${item.satuan?.name})` }))}
+                    />
+                  </div>
+
+                  <div className="col-span-3 flex flex-col gap-1">
+                    <label className="text-xs font-medium text-gray-700">Supplier</label>
+                    <Combobox
+                      value={line.supplier_id}
+                      onValueChange={(v) => updateNewLine(line.key, { supplier_id: v })}
+                      placeholder="Pilih supplier..."
+                      emptyText="Supplier tidak ditemukan."
+                      options={suppliers.map((supplier) => ({ value: String(supplier.id), label: supplier.name }))}
+                    />
+                  </div>
+
+                  <div className="col-span-2 flex flex-col gap-1">
+                    <label className="text-xs font-medium text-gray-700">Qty {selectedItem ? `(${selectedItem.satuan?.name})` : ''}</label>
+                    <Input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={line.qty_ordered}
+                      onChange={(e) => updateNewLine(line.key, { qty_ordered: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="col-span-2 flex flex-col gap-1">
+                    <label className="text-xs font-medium text-gray-700">Estimasi Harga</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={line.estimated_price}
+                      onChange={(e) => updateNewLine(line.key, { estimated_price: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="col-span-1 flex justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeNewLine(line.key)}
+                      disabled={newLines.length === 1}
+                    >
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+
+            <Button type="button" variant="outline" size="sm" onClick={addNewLine} className="self-start">
+              <Plus className="h-4 w-4" />
+              Tambah Baris
+            </Button>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setAddItemOpen(false)}>
+              Batal
+            </Button>
+            <Button type="button" onClick={submitAddItems} disabled={addingItems}>
+              {addingItems ? 'Menyimpan...' : 'Simpan'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
