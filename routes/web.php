@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\DapurController;
 use App\Http\Controllers\Admin\ItemController;
@@ -143,6 +144,10 @@ Route::middleware(['auth'])->group(function () {
             Route::get('{backup}/download', [BackupController::class, 'download'])->name('download');
             Route::delete('{backup}', [BackupController::class, 'destroy'])->name('destroy');
         });
+
+        Route::get('audit-logs', [AuditLogController::class, 'index'])
+            ->middleware('permission:system.audit-log.view')
+            ->name('audit-logs.index');
     });
 });
 
