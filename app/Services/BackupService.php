@@ -68,6 +68,8 @@ class BackupService
         $diskPath = "backups/backup_{$timestamp}.sql";
         Storage::disk('local')->makeDirectory('backups');
 
+        $absolutePath = Storage::disk('local')->path($diskPath);
+
         $connection = config('database.connections.mysql');
 
         $process = new Process([
@@ -78,13 +80,39 @@ class BackupService
             '--password='.$connection['password'],
             $connection['database'],
         ]);
-        $process->run();
+        // mysqldump of a non-trivial production database can easily run past
+        // Symfony Process's default 60s timeout. This is an admin-triggered,
+        // not time-critical, operation, so disable the timeout entirely.
+        $process->setTimeout(null);
 
-        if (! $process->isSuccessful()) {
-            throw new \RuntimeException('Gagal menjalankan mysqldump: '.$process->getErrorOutput());
+        // Disable Symfony Process's internal output buffering so the (potentially
+        // multi-GB) STDOUT stream is never held in PHP memory. Instead, stream each
+        // STDOUT chunk straight to the destination file as it arrives. Only STDERR
+        // (a small error message on failure, at most) is buffered in memory.
+        $process->disableOutput();
+
+        $handle = fopen($absolutePath, 'wb');
+        if ($handle === false) {
+            throw new \RuntimeException("Gagal membuka file tujuan backup: {$absolutePath}");
         }
 
-        Storage::disk('local')->put($diskPath, $process->getOutput());
+        $errorOutput = '';
+
+        try {
+            $process->run(function (string $type, string $buffer) use ($handle, &$errorOutput) {
+                if ($type === Process::OUT) {
+                    fwrite($handle, $buffer);
+                } else {
+                    $errorOutput .= $buffer;
+                }
+            });
+        } finally {
+            fclose($handle);
+        }
+
+        if (! $process->isSuccessful()) {
+            throw new \RuntimeException('Gagal menjalankan mysqldump: '.$errorOutput);
+        }
 
         return $diskPath;
     }
