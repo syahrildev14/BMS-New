@@ -32,6 +32,7 @@ Route::middleware(['auth'])->group(function () {
         Route::resource('orders', OrderController::class)
             ->only(['index', 'create', 'store', 'show']);
         Route::post('orders/{order}/stt', [OrderController::class, 'submitStt'])->name('orders.stt');
+        Route::post('orders/{order}/items', [OrderController::class, 'addItems'])->name('orders.items.store');
         Route::patch('orders/{order}/items/{orderItem}', [OrderController::class, 'updateItem'])->name('orders.items.update');
         Route::delete('orders/{order}/items/{orderItem}', [OrderController::class, 'destroyItem'])->name('orders.items.destroy');
         Route::get('orders/{order}/surat-jalan/download', [OrderController::class, 'downloadSuratJalan'])

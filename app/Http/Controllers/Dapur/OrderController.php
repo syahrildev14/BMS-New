@@ -126,6 +126,37 @@ class OrderController extends Controller
         return back()->with('success', 'Data penerimaan barang (STT) berhasil disimpan.');
     }
 
+    /**
+     * Dapur adds new item lines to an Order that's already been submitted —
+     * e.g. a same-day add-on or a late-evening revision. Goes through the
+     * exact same Tier 1/2/3 cut-off logic as the initial submission
+     * (RevisionGateService::submitRevision), not a separate code path.
+     */
+    public function addItems(Request $request, Order $order, RevisionGateService $revisionGate): RedirectResponse
+    {
+        abort_unless($order->dapur_id === $request->user()->dapur_id, 403);
+        abort_if(
+            in_array($order->status, ['CANCELLED', 'COMPLETED'], true),
+            422,
+            "Tidak bisa menambah item ke Order berstatus {$order->status}."
+        );
+
+        $validated = $request->validate([
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.item_id' => ['required', 'integer', 'exists:items,id'],
+            'items.*.supplier_id' => ['required', 'integer', 'exists:suppliers,id'],
+            'items.*.qty_ordered' => ['required', 'numeric', 'min:0.01'],
+            'items.*.estimated_price' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        $result = $revisionGate->submitRevision($order, $validated['items'], $request->user());
+
+        return back()->with(
+            'success',
+            count($validated['items']) . " item ditambahkan (tier: {$result['tier']})."
+        );
+    }
+
     public function downloadSuratJalan(Request $request, Order $order): StreamedResponse
     {
         abort_unless($order->dapur_id === $request->user()->dapur_id, 403);
