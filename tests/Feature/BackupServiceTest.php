@@ -28,11 +28,16 @@ it('deletes both the physical file and the Backup row', function () {
 });
 
 it('refuses to back up an unsupported database driver', function () {
-    config(['database.default' => 'pgsql']);
+    // Create the user BEFORE switching the default connection — otherwise
+    // this query itself fails to connect, before ever reaching the
+    // assertion we actually care about.
     $user = User::factory()->create();
+    config(['database.default' => 'pgsql']);
 
     expect(fn () => app(BackupService::class)->create($user))
         ->toThrow(RuntimeException::class);
 
+    // Switch back before querying — the connection is still pgsql otherwise.
+    config(['database.default' => 'sqlite']);
     expect(Backup::count())->toBe(0);
 });
