@@ -14,6 +14,15 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // Seeder ini berisi data dummy & akun ber-password lemah, hanya untuk
+        // tes lokal. Di produksi gunakan: db:seed --class=RoleAndPermissionSeeder
+        if (app()->environment('production')) {
+            $this->command->error('DatabaseSeeder berisi data dummy dan tidak boleh dijalankan di production.');
+            $this->command->line('Gunakan: php artisan db:seed --class=RoleAndPermissionSeeder --force');
+
+            return;
+        }
+
         $this->call(RoleAndPermissionSeeder::class);
         $this->call(SatuanSeeder::class);
         $this->call(SupplierSeeder::class);
