@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Order extends Model
@@ -38,9 +39,14 @@ class Order extends Model
         return $this->hasMany(OrderItem::class);
     }
 
-    public function suratJalans(): HasMany
+    /**
+     * Delivery documents (SJ kering / TT basah) carrying any of this Order's
+     * items. Resolved through order_items because one document may cover
+     * several Orders of the same Dapur.
+     */
+    public function suratJalans(): BelongsToMany
     {
-        return $this->hasMany(SuratJalan::class);
+        return $this->belongsToMany(SuratJalan::class, 'order_items', 'order_id', 'surat_jalan_id')->distinct();
     }
 
     public function invoices(): HasMany

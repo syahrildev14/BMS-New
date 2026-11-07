@@ -9,9 +9,10 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Renders the physical delivery note PDF (packing list — no pricing, that's
- * Invoice's job) that the driver carries and Dapur signs off on receipt, and
- * stores its path on `surat_jalans.pdf_url` for Ops/Dapur to download.
+ * Renders the delivery document PDF (no pricing — that's Invoice's job):
+ *  - SURAT_JALAN: page 1 Surat Jalan + page 2 blank Tanda Terima form.
+ *  - TANDA_TERIMA: one blank Tanda Terima form the Supplier brings along.
+ * Stored on `surat_jalans.pdf_url` for Ops/Dapur to download.
  */
 class GenerateSuratJalanPdfJob implements ShouldQueue
 {
@@ -21,7 +22,7 @@ class GenerateSuratJalanPdfJob implements ShouldQueue
 
     public function handle(): void
     {
-        $suratJalan = SuratJalan::with(['order.dapur', 'orderItems.item.satuan', 'orderItems.supplier'])
+        $suratJalan = SuratJalan::with(['dapur', 'supplier', 'order.dapur', 'orderItems.item.satuan', 'orderItems.order'])
             ->findOrFail($this->suratJalanId);
 
         $pdf = Pdf::loadView('pdf.surat-jalan', ['suratJalan' => $suratJalan]);

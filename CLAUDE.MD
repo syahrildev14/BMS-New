@@ -13,10 +13,11 @@
 - **Access Control:** Dynamic RBAC using `spatie/laravel-permission`.
 
 ## 3. Critical Business Rules (STRICT COMPLIANCE)
-1. **Multi-Delivery Note Engine (Parent-Child & Add-on SJ):**
-   - An `Order` can have multiple `SuratJalan` records (`PRIMARY` for main shipment, `ADDON` for H+1/H+2 changes).
-   - Items linked to an existing SJ MUST NOT be duplicated. Items without SJ (`surat_jalan_id IS NULL`) are assigned when a new SJ is generated.
-   - Use `DB::transaction()` and `lockForUpdate()` when generating Delivery Notes to prevent duplicate PDF generation or race conditions.
+1. **Delivery Documents per Dapur + Supplier (`surat_jalans` table):**
+   - Two `document_type`s: `SURAT_JALAN` (DRY_GOODS shipped by the koperasi; may combine several daily Orders of one Dapur, e.g. the weekly Sunday shipment) and `TANDA_TERIMA` (WET_GOODS delivered directly by the Supplier; one per Dapur + Supplier per delivery date). WET_GOODS never go on a Surat Jalan.
+   - One document per Dapur + Supplier. First document for a (Dapur, Supplier, type, shipment date) is `PRIMARY`, later ones `ADDON`. `surat_jalans.order_id` is legacy; Order ↔ document is resolved through `order_items.surat_jalan_id`.
+   - Items linked to an existing document MUST NOT be duplicated. Items without one (`surat_jalan_id IS NULL`) are assigned when a new document is generated.
+   - Use `DB::transaction()` and `lockForUpdate()` when generating delivery documents to prevent duplicates or race conditions.
 
 2. **Daily Dynamic Pricing & Automated Master Sync:**
    - Daily cost prices update snapshot `order_items` and `daily_prices`.

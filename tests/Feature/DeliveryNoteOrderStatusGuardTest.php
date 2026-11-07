@@ -4,7 +4,7 @@ use App\Models\SuratJalan;
 use App\Models\User;
 use App\Services\DeliveryNoteService;
 
-it('refuses to generate a Surat Jalan for a CANCELLED Order', function () {
+it('refuses to generate a delivery document for a CANCELLED Order', function () {
     makeGudang();
     $dapur = makeDapur();
     $supplier = makeSupplier();
@@ -14,13 +14,13 @@ it('refuses to generate a Surat Jalan for a CANCELLED Order', function () {
     $order = makeOrder($dapur, ['status' => 'CANCELLED']);
     makeOrderItem($order, $item, $supplier);
 
-    expect(fn () => app(DeliveryNoteService::class)->generateSuratJalan($order->id, $opsUser->id))
+    expect(fn () => app(DeliveryNoteService::class)->generateDocuments($dapur->id, SuratJalan::TANDA_TERIMA, $order->delivery_date->toDateString(), $opsUser->id))
         ->toThrow(RuntimeException::class);
 
-    expect(SuratJalan::where('order_id', $order->id)->count())->toBe(0);
+    expect(SuratJalan::count())->toBe(0);
 });
 
-it('refuses to generate a Surat Jalan for a COMPLETED Order', function () {
+it('refuses to generate a delivery document for a COMPLETED Order', function () {
     makeGudang();
     $dapur = makeDapur();
     $supplier = makeSupplier();
@@ -30,8 +30,8 @@ it('refuses to generate a Surat Jalan for a COMPLETED Order', function () {
     $order = makeOrder($dapur, ['status' => 'COMPLETED']);
     makeOrderItem($order, $item, $supplier);
 
-    expect(fn () => app(DeliveryNoteService::class)->generateSuratJalan($order->id, $opsUser->id))
+    expect(fn () => app(DeliveryNoteService::class)->generateDocuments($dapur->id, SuratJalan::TANDA_TERIMA, $order->delivery_date->toDateString(), $opsUser->id))
         ->toThrow(RuntimeException::class);
 
-    expect(SuratJalan::where('order_id', $order->id)->count())->toBe(0);
+    expect(SuratJalan::count())->toBe(0);
 });

@@ -16,8 +16,11 @@ use App\Http\Controllers\Finance\SupplierBillController;
 use App\Http\Controllers\Gudang\PurchaseOrderController as GudangPurchaseOrderController;
 use App\Http\Controllers\Gudang\StockController;
 use App\Http\Controllers\Ops\DeliveryNoteController;
+use App\Http\Controllers\Ops\DeliveryVerificationController;
 use App\Http\Controllers\Ops\RevisionController;
+use App\Http\Controllers\Purchasing\PurchaseNoteController;
 use App\Http\Controllers\Purchasing\PurchaseOrderController;
+use App\Http\Controllers\Purchasing\ShoppingListController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -37,10 +40,16 @@ Route::middleware(['auth'])->group(function () {
         Route::post('orders/{order}/items', [OrderController::class, 'addItems'])->name('orders.items.store');
         Route::patch('orders/{order}/items/{orderItem}', [OrderController::class, 'updateItem'])->name('orders.items.update');
         Route::delete('orders/{order}/items/{orderItem}', [OrderController::class, 'destroyItem'])->name('orders.items.destroy');
-        Route::get('orders/{order}/surat-jalan/download', [OrderController::class, 'downloadSuratJalan'])
-            ->name('orders.surat-jalan.download');
-        Route::get('orders/{order}/tanda-terima/download', [OrderController::class, 'downloadTandaTerima'])
-            ->name('orders.tanda-terima.download');
+        Route::get('documents/{suratJalan}/download', [OrderController::class, 'downloadDocument'])
+            ->name('documents.download');
+        Route::get('documents/{suratJalan}/tanda-terima', [OrderController::class, 'downloadDocumentTandaTerima'])
+            ->name('documents.tanda-terima.download');
+        Route::post('documents/{suratJalan}/photos', [OrderController::class, 'storeDocumentPhotos'])
+            ->name('documents.photos.store');
+        Route::get('documents/{suratJalan}/photos/{photo}', [OrderController::class, 'showDocumentPhoto'])
+            ->name('documents.photos.show');
+        Route::delete('documents/{suratJalan}/photos/{photo}', [OrderController::class, 'destroyDocumentPhoto'])
+            ->name('documents.photos.destroy');
     });
 
     Route::prefix('ops')->name('ops.')->group(function () {
@@ -53,6 +62,14 @@ Route::middleware(['auth'])->group(function () {
         Route::get('delivery-notes/{suratJalan}/tanda-terima', [DeliveryNoteController::class, 'downloadTandaTerima'])
             ->middleware('permission:delivery-notes.manage')
             ->name('delivery-notes.tanda-terima.download');
+
+        Route::middleware('permission:delivery-verifications.manage')->group(function () {
+            Route::get('verifications', [DeliveryVerificationController::class, 'index'])->name('verifications.index');
+            Route::get('verifications/{suratJalan}', [DeliveryVerificationController::class, 'show'])->name('verifications.show');
+            Route::post('verifications/{suratJalan}/verify', [DeliveryVerificationController::class, 'verify'])->name('verifications.verify');
+            Route::post('verifications/{suratJalan}/discrepancy', [DeliveryVerificationController::class, 'discrepancy'])->name('verifications.discrepancy');
+            Route::get('verifications/{suratJalan}/photos/{photo}', [DeliveryVerificationController::class, 'photo'])->name('verifications.photos.show');
+        });
 
         Route::middleware('permission:revisions.approve')->group(function () {
             Route::get('revisions', [RevisionController::class, 'index'])->name('revisions.index');
@@ -68,6 +85,17 @@ Route::middleware(['auth'])->group(function () {
             ->name('purchase-orders.by-date');
         Route::patch('purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'update'])->name('purchase-orders.update');
         Route::post('purchase-orders/{purchaseOrder}/send', [PurchaseOrderController::class, 'send'])->name('purchase-orders.send');
+    });
+
+    Route::prefix('purchasing')->name('purchasing.')->middleware('permission:purchase-notes.manage')->group(function () {
+        Route::get('shopping-list', [ShoppingListController::class, 'index'])->name('shopping-list.index');
+        Route::get('purchase-notes', [PurchaseNoteController::class, 'index'])->name('purchase-notes.index');
+        Route::get('purchase-notes/create', [PurchaseNoteController::class, 'create'])->name('purchase-notes.create');
+        Route::post('purchase-notes', [PurchaseNoteController::class, 'store'])->name('purchase-notes.store');
+        Route::get('purchase-notes/tanda-terima/{suratJalan}', [PurchaseNoteController::class, 'createWet'])->name('purchase-notes.create-wet');
+        Route::post('purchase-notes/tanda-terima/{suratJalan}', [PurchaseNoteController::class, 'storeWet'])->name('purchase-notes.store-wet');
+        Route::get('purchase-notes/{purchaseNote}/edit', [PurchaseNoteController::class, 'edit'])->name('purchase-notes.edit');
+        Route::put('purchase-notes/{purchaseNote}', [PurchaseNoteController::class, 'update'])->name('purchase-notes.update');
     });
 
     Route::prefix('gudang')->name('gudang.')->middleware('permission:stock.manage')->group(function () {

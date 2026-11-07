@@ -43,6 +43,22 @@ class AuditLog extends Model
      */
     public static function pendingOrderItemIds(int $orderId): Collection
     {
+        return static::pendingOrderItemIdsFor($orderId);
+    }
+
+    /**
+     * Same as pendingOrderItemIds() but across every Order — used when a
+     * delivery document spans several Orders of one Dapur.
+     *
+     * @return Collection<int, int>
+     */
+    public static function allPendingOrderItemIds(): Collection
+    {
+        return static::pendingOrderItemIdsFor(null);
+    }
+
+    private static function pendingOrderItemIdsFor(?int $orderId): Collection
+    {
         $resolvedLogIds = static::whereIn('action', ['ORDER_REVISION_APPROVED', 'ORDER_REVISION_REJECTED'])
             ->get()
             ->pluck('old_data.source_log_id')
@@ -52,7 +68,7 @@ class AuditLog extends Model
         return static::where('action', 'ORDER_REVISION_PENDING_APPROVAL')
             ->whereNotIn('id', $resolvedLogIds)
             ->get()
-            ->filter(fn (self $log) => ($log->new_data['order_id'] ?? null) === $orderId)
+            ->filter(fn (self $log) => $orderId === null || ($log->new_data['order_id'] ?? null) === $orderId)
             ->flatMap(fn (self $log) => collect($log->new_data['items'] ?? [])->pluck('id'))
             ->values();
     }

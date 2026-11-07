@@ -4,21 +4,28 @@ namespace App\Http\Controllers\Dapur;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreOrderRequest;
-use App\Jobs\GenerateOrderTandaTerimaPdfJob;
 use App\Jobs\GenerateTandaTerimaPdfJob;
+use App\Models\DeliveryDocumentPhoto;
 use App\Models\Item;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\Supplier;
+use App\Models\SuratJalan;
+use App\Services\DeliveryNoteService;
+use App\Services\DeliveryVerificationService;
 use App\Services\RevisionGateService;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class OrderController extends Controller
 {
@@ -29,7 +36,7 @@ class OrderController extends Controller
         return Inertia::render('dapur/orders/index', [
             'orders' => Order::where('dapur_id', $dapurId)
                 ->latest('delivery_date')
-                ->with('orderItems.item')
+                ->with('orderItems:id,order_id')
                 ->get(),
         ]);
     }
@@ -37,9 +44,20 @@ class OrderController extends Controller
     public function create(): Response
     {
         return Inertia::render('dapur/orders/create', [
-            'items' => Item::with(['defaultSupplier', 'satuan'])->where('is_active', true)->get(),
-            'suppliers' => Supplier::all(),
+            'items' => $this->orderableItems(),
         ]);
+    }
+
+    /**
+     * Catalog for Dapur forms: only what they choose from. Cost, margin and
+     * supplier are the koperasi's and must not reach the Dapur's browser.
+     */
+    private function orderableItems(): Collection
+    {
+        return Item::with('satuan:id,name')
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'satuan_id']);
     }
 
     public function store(StoreOrderRequest $request, RevisionGateService $revisionGate): RedirectResponse
@@ -47,9 +65,19 @@ class OrderController extends Controller
         $dapurId = $request->user()->dapur_id;
         $validated = $request->validated();
 
-        $order = $this->findOrCreateOrderSafely($dapurId, $validated);
+        // Retried on deadlock: two first submissions for one Dapur+date can
+        // both hold the gap lock from the existing-Order lookup before inserting.
+        $result = DB::transaction(function () use ($dapurId, $validated, $revisionGate, $request) {
+            $order = $this->findOrCreateOrderSafely($dapurId, $validated);
 
-        $result = $revisionGate->submitRevision($order, $validated['items'], $request->user());
+            if (in_array($order->status, ['CANCELLED', 'COMPLETED'], true)) {
+                throw ValidationException::withMessages([
+                    'delivery_date' => "Order untuk tanggal ini sudah {$order->status}, tidak bisa ditambah. Hubungi koperasi.",
+                ]);
+            }
+
+            return $revisionGate->submitRevision($order, $this->resolveOrderLines($validated['items']), $request->user());
+        }, 3);
 
         return redirect()
             ->route('dapur.orders.index')
@@ -60,13 +88,15 @@ class OrderController extends Controller
     {
         abort_unless($order->dapur_id === $request->user()->dapur_id, 403);
 
+        $order->load([
+            'orderItems.item:id,name,satuan_id',
+            'suratJalans' => fn ($query) => $query->with(['supplier:id,name', 'photos'])->orderBy('surat_jalans.id'),
+        ]);
+        $order->orderItems->makeHidden('final_cost_price');
+
         return Inertia::render('dapur/orders/show', [
-            'order' => $order->load([
-                'orderItems.item',
-                'suratJalans' => fn ($query) => $query->orderBy('sequence_number'),
-            ]),
-            'items' => Item::with(['defaultSupplier', 'satuan'])->where('is_active', true)->get(),
-            'suppliers' => Supplier::all(),
+            'order' => $order,
+            'items' => $this->orderableItems(),
         ]);
     }
 
@@ -111,6 +141,19 @@ class OrderController extends Controller
         $affectedSjIds = DB::transaction(function () use ($order, $validated) {
             $itemIds = collect($validated['items'])->pluck('id');
 
+            // Same row lock as DeliveryVerificationService, so a verification
+            // can't slip in between this check and the update below.
+            $locked = SuratJalan::whereIn('id', $order->orderItems()->whereIn('id', $itemIds)->whereNotNull('surat_jalan_id')->select('surat_jalan_id'))
+                ->lockForUpdate()
+                ->get()
+                ->where('verification_status', SuratJalan::VERIFICATION_VERIFIED);
+
+            if ($locked->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'items' => 'STT tidak bisa diubah, dokumen sudah terverifikasi koperasi: '.$locked->pluck('sj_number')->implode(', ').'.',
+                ]);
+            }
+
             foreach ($validated['items'] as $line) {
                 $order->orderItems()
                     ->whereKey($line['id'])
@@ -129,17 +172,18 @@ class OrderController extends Controller
                 ->unique();
         });
 
-        // Per-SJ Tanda Terima PDF (operational record, same granularity as the
-        // Surat Jalan each shipment travelled with) ...
+        // Filled-in Tanda Terima PDF (STT result) per delivery document.
+        // The STT is already committed, so a PDF failure must not look like a
+        // failed save; the next STT save renders it again.
         foreach ($affectedSjIds as $suratJalanId) {
-            GenerateTandaTerimaPdfJob::dispatchSync($suratJalanId);
-        }
-
-        // ... plus one combined Tanda Terima PDF for the whole Order, which is
-        // what Dapur actually downloads — covers every shipment confirmed so
-        // far, not just the ones touched by this particular STT submission.
-        if ($affectedSjIds->isNotEmpty()) {
-            GenerateOrderTandaTerimaPdfJob::dispatchSync($order->id);
+            try {
+                GenerateTandaTerimaPdfJob::dispatchSync($suratJalanId);
+            } catch (Throwable $e) {
+                Log::error('Gagal generate PDF Tanda Terima hasil STT.', [
+                    'surat_jalan_id' => $suratJalanId,
+                    'exception' => $e,
+                ]);
+            }
         }
 
         return back()->with('success', 'Data penerimaan barang (STT) berhasil disimpan.');
@@ -160,15 +204,9 @@ class OrderController extends Controller
             "Tidak bisa menambah item ke Order berstatus {$order->status}."
         );
 
-        $validated = $request->validate([
-            'items' => ['required', 'array', 'min:1'],
-            'items.*.item_id' => ['required', 'integer', 'exists:items,id'],
-            'items.*.supplier_id' => ['required', 'integer', 'exists:suppliers,id'],
-            'items.*.qty_ordered' => ['required', 'numeric', 'min:0.01'],
-            'items.*.estimated_price' => ['required', 'numeric', 'min:0'],
-        ]);
+        $validated = $request->validate(StoreOrderRequest::itemLineRules());
 
-        $result = $revisionGate->submitRevision($order, $validated['items'], $request->user());
+        $result = $revisionGate->submitRevision($order, $this->resolveOrderLines($validated['items']), $request->user());
 
         return back()->with(
             'success',
@@ -176,26 +214,82 @@ class OrderController extends Controller
         );
     }
 
-    public function downloadSuratJalan(Request $request, Order $order): StreamedResponse
+    /**
+     * Delivery document PDF (Surat Jalan kering / Tanda Terima basah).
+     * Scoped to the user's own Dapur — a document may span several Orders,
+     * so ownership is checked on the document, not on one Order.
+     */
+    public function downloadDocument(Request $request, SuratJalan $suratJalan, DeliveryNoteService $deliveryNotes): StreamedResponse
     {
-        abort_unless($order->dapur_id === $request->user()->dapur_id, 403);
-        abort_unless($order->pdf_url && Storage::disk('local')->exists($order->pdf_url), 404);
+        abort_unless($this->ownsDocument($request, $suratJalan), 403);
+        $deliveryNotes->ensurePdf($suratJalan);
 
         return Storage::disk('local')->download(
-            $order->pdf_url,
-            'Surat-Jalan-'.str_replace('/', '-', $order->order_number).'.pdf'
+            $suratJalan->pdf_url,
+            str_replace('/', '-', $suratJalan->sj_number).'.pdf'
         );
     }
 
-    public function downloadTandaTerima(Request $request, Order $order): StreamedResponse
+    /** Filled-in Tanda Terima (STT result) for one delivery document. */
+    public function downloadDocumentTandaTerima(Request $request, SuratJalan $suratJalan): StreamedResponse
     {
-        abort_unless($order->dapur_id === $request->user()->dapur_id, 403);
-        abort_unless($order->tanda_terima_pdf_url && Storage::disk('local')->exists($order->tanda_terima_pdf_url), 404);
+        abort_unless($this->ownsDocument($request, $suratJalan), 403);
+        abort_unless($suratJalan->tanda_terima_pdf_url && Storage::disk('local')->exists($suratJalan->tanda_terima_pdf_url), 404);
 
         return Storage::disk('local')->download(
-            $order->tanda_terima_pdf_url,
-            'Tanda-Terima-'.str_replace('/', '-', $order->order_number).'.pdf'
+            $suratJalan->tanda_terima_pdf_url,
+            'Tanda-Terima-'.str_replace('/', '-', $suratJalan->sj_number).'.pdf'
         );
+    }
+
+    /** Arrival photos for one delivery document. */
+    public function storeDocumentPhotos(Request $request, SuratJalan $suratJalan, DeliveryVerificationService $service): RedirectResponse
+    {
+        abort_unless($this->ownsDocument($request, $suratJalan), 403);
+
+        $validated = $request->validate([
+            'photos' => [
+                'required', 'array', 'min:1', 'max:'.DeliveryVerificationService::MAX_PHOTOS_PER_DOCUMENT,
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $totalKb = collect($value)->sum(fn ($file) => $file instanceof UploadedFile ? $file->getSize() / 1024 : 0);
+
+                    if ($totalKb > DeliveryVerificationService::MAX_UPLOAD_KB) {
+                        $fail('Total foto dalam sekali unggah maksimal 20 MB. Unggah sebagian dulu.');
+                    }
+                },
+            ],
+            'photos.*' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+        ]);
+
+        $service->addPhotos($suratJalan, $validated['photos'], $request->user());
+
+        return back()->with('success', 'Foto berhasil diunggah.');
+    }
+
+    public function showDocumentPhoto(Request $request, SuratJalan $suratJalan, DeliveryDocumentPhoto $photo): StreamedResponse
+    {
+        abort_unless($this->ownsDocument($request, $suratJalan), 403);
+        abort_unless($photo->surat_jalan_id === $suratJalan->id, 404);
+        abort_unless(Storage::disk('local')->exists($photo->path), 404);
+
+        return Storage::disk('local')->response($photo->path);
+    }
+
+    public function destroyDocumentPhoto(Request $request, SuratJalan $suratJalan, DeliveryDocumentPhoto $photo, DeliveryVerificationService $service): RedirectResponse
+    {
+        abort_unless($this->ownsDocument($request, $suratJalan), 403);
+        abort_unless($photo->surat_jalan_id === $suratJalan->id, 404);
+
+        $service->deletePhoto($photo);
+
+        return back()->with('success', 'Foto dihapus.');
+    }
+
+    private function ownsDocument(Request $request, SuratJalan $suratJalan): bool
+    {
+        $dapurId = $suratJalan->dapur_id ?? $suratJalan->order?->dapur_id;
+
+        return $dapurId !== null && $dapurId === $request->user()->dapur_id;
     }
 
     /**
@@ -208,7 +302,7 @@ class OrderController extends Controller
         $this->authorizeEditableItem($request, $order, $orderItem);
 
         $validated = $request->validate([
-            'qty_ordered' => ['required', 'numeric', 'min:0.01'],
+            'qty_ordered' => ['required', 'numeric', 'min:0.01', 'max:99999999.99'],
         ]);
 
         $orderItem->update($validated);
@@ -230,6 +324,31 @@ class OrderController extends Controller
         abort_unless($order->dapur_id === $request->user()->dapur_id, 403);
         abort_unless($orderItem->order_id === $order->id, 404);
         abort_unless($orderItem->surat_jalan_id === null, 422, 'Item ini sudah punya Surat Jalan dan tidak bisa diedit lagi.');
+    }
+
+    /**
+     * Fills supplier_id and estimated_price from the item master — Dapur
+     * only submits item + qty; anything else the client sends is ignored.
+     * Validation (StoreOrderRequest::itemLineRules) already guarantees each
+     * item is active and has a default_supplier_id.
+     *
+     * @param  array<int, array{item_id: int, qty_ordered: float|string}>  $lines
+     * @return array<int, array{item_id: int, supplier_id: int, qty_ordered: float, estimated_price: float}>
+     */
+    private function resolveOrderLines(array $lines): array
+    {
+        $items = Item::whereIn('id', collect($lines)->pluck('item_id'))->get()->keyBy('id');
+
+        return collect($lines)->map(function (array $line) use ($items) {
+            $item = $items[(int) $line['item_id']];
+
+            return [
+                'item_id' => $item->id,
+                'supplier_id' => $item->default_supplier_id,
+                'qty_ordered' => (float) $line['qty_ordered'],
+                'estimated_price' => (float) ($item->base_selling_price ?? 0),
+            ];
+        })->values()->all();
     }
 
     /**
@@ -266,8 +385,12 @@ class OrderController extends Controller
         $maxAttempts = 5;
 
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            // lockForUpdate() reads the latest committed row: inside the caller's
+            // transaction a plain read would keep returning the old snapshot
+            // and never see the Order a concurrent request just created.
             $existing = Order::where('dapur_id', $dapurId)
                 ->where('delivery_date', $validated['delivery_date'])
+                ->lockForUpdate()
                 ->first();
 
             if ($existing) {

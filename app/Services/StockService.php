@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Gudang;
 use App\Models\Item;
+use App\Models\PurchaseNoteItem;
 use App\Models\PurchaseOrderItem;
 use App\Models\StockLot;
 use App\Models\StockMovement;
@@ -66,6 +67,38 @@ class StockService
 
             $purchaseOrder->update([
                 'status' => $fullyReceived ? 'RECEIVED' : 'PARTIALLY_RECEIVED',
+            ]);
+
+            return $lot;
+        });
+    }
+
+    /**
+     * Receive goods bought directly (Nota Pembelian kering, no PO) into a new
+     * FIFO stock lot priced at the nota's unit price.
+     */
+    public function receiveFromNote(PurchaseNoteItem $noteItem, Gudang $gudang, User $user): StockLot
+    {
+        return DB::transaction(function () use ($noteItem, $gudang, $user) {
+            $lot = StockLot::create([
+                'gudang_id' => $gudang->id,
+                'item_id' => $noteItem->item_id,
+                'purchase_note_item_id' => $noteItem->id,
+                'qty_received' => $noteItem->qty,
+                'qty_remaining' => $noteItem->qty,
+                'unit_cost' => $noteItem->unit_price,
+                'received_at' => now(),
+            ]);
+
+            StockMovement::create([
+                'gudang_id' => $gudang->id,
+                'item_id' => $noteItem->item_id,
+                'stock_lot_id' => $lot->id,
+                'type' => 'PURCHASE_IN',
+                'qty' => $noteItem->qty,
+                'reference_type' => PurchaseNoteItem::class,
+                'reference_id' => $noteItem->id,
+                'created_by' => $user->id,
             ]);
 
             return $lot;

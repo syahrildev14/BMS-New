@@ -21,6 +21,7 @@ class StockLot extends Model
         'gudang_id',
         'item_id',
         'purchase_order_item_id',
+        'purchase_note_item_id',
         'qty_received',
         'qty_remaining',
         'unit_cost',

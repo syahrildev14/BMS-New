@@ -64,16 +64,16 @@ class SupplierBillService
                     return ((float) $item->qty_received - (float) $item->qty_rejected) * $item->final_cost_price;
                 });
 
-                if ($existing && $existing->status === 'ISSUED') {
+                if ($existing && in_array($existing->status, BillingGuard::FINAL_STATUSES, true)) {
                     // Same reasoning as SplitInvoiceService::generateInvoicesForOrder():
                     // a late add-on Surat Jalan STT-ed after this bill was
                     // already approved must not be silently dropped.
                     abort_if(
                         round($totalAmount, 2) !== round((float) $existing->total_amount, 2),
                         422,
-                        "Bill {$existing->bill_number} sudah ISSUED, tapi ada perubahan kuantitas tertagih (kemungkinan Surat Jalan susulan yang baru di-STT) untuk supplier ini — total baru ".
+                        "Bill {$existing->bill_number} sudah {$existing->status}, tapi ada perubahan kuantitas tertagih (kemungkinan Surat Jalan susulan yang baru di-STT) untuk supplier ini — total baru ".
                             number_format($totalAmount, 2).' vs bill yang sudah terbit '.number_format((float) $existing->total_amount, 2).
-                            '. Bill yang sudah ISSUED tidak ditimpa otomatis — butuh bill/penyesuaian susulan secara manual.'
+                            '. Bill yang sudah terbit tidak ditimpa otomatis — butuh bill/penyesuaian susulan secara manual.'
                     );
 
                     $bills->push($existing);

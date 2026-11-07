@@ -19,7 +19,7 @@ it('reuses the existing Order instead of crashing when a concurrent submission a
     $dapur = makeDapur();
     $user = makeUserWithRole('dapur', ['dapur_id' => $dapur->id]);
     $supplier = makeSupplier();
-    $item = makeItem(['category' => 'WET_GOODS']);
+    $item = makeItem(['category' => 'WET_GOODS', 'default_supplier_id' => $supplier->id]);
 
     $deliveryDate = now()->addDays(2)->toDateString();
 

@@ -25,10 +25,6 @@ class RevisionGateService
 
     public const TIER_3 = 'TIER_3';
 
-    public function __construct(
-        private readonly DeliveryNoteService $deliveryNoteService,
-    ) {}
-
     public function determineTier(Order $order, ?Carbon $now = null): string
     {
         $now = ($now ?? Carbon::now())->timezone('Asia/Jakarta');
@@ -84,26 +80,21 @@ class RevisionGateService
             $order->update(['status' => 'SUBMITTED']);
         }
 
+        // Dry-goods stock shortages are no longer turned into draft POs —
+        // they surface on Purchasing's Daftar Belanja (PurchaseNoteService::shoppingList).
         $this->log($order, $user, 'ORDER_REVISION_AUTO_MERGED', $items);
-
-        // Early shortfall detection (see DeliveryNoteService::checkStockShortfalls):
-        // these items are confirmed immediately, so check stock now rather than
-        // waiting for Ops to eventually click Generate Surat Jalan.
-        $this->deliveryNoteService->checkStockShortfalls($order, $user);
     }
 
     private function flagPendingApproval(Order $order, User $user, Collection $items): void
     {
         // Not confirmed yet — Tier 2 still needs Ops approval, which may
-        // reject these items outright. Checking stock here would risk
-        // drafting POs for items that never ship. See approveRevision().
+        // reject these items outright.
         $this->log($order, $user, 'ORDER_REVISION_PENDING_APPROVAL', $items);
     }
 
     private function emergencyOverride(Order $order, User $user, Collection $items): void
     {
         $this->log($order, $user, 'ORDER_REVISION_EMERGENCY_OVERRIDE', $items);
-        $this->deliveryNoteService->checkStockShortfalls($order, $user);
     }
 
     /**
@@ -112,15 +103,7 @@ class RevisionGateService
      */
     public function approveRevision(AuditLog $pendingLog, User $opsUser): AuditLog
     {
-        $resolved = $this->resolve($pendingLog, $opsUser, 'ORDER_REVISION_APPROVED');
-
-        // Now confirmed — same early shortfall detection as Tier 1/3.
-        $orderId = $pendingLog->new_data['order_id'] ?? null;
-        if ($orderId) {
-            $this->deliveryNoteService->checkStockShortfalls(Order::findOrFail($orderId), $opsUser);
-        }
-
-        return $resolved;
+        return $this->resolve($pendingLog, $opsUser, 'ORDER_REVISION_APPROVED');
     }
 
     /**

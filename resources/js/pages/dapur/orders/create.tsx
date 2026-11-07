@@ -7,42 +7,37 @@ import { Button } from '@/shared/components/ui/button';
 import { Combobox } from '@/shared/components/ui/combobox';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
-import type { Item, Supplier } from '@/shared/types/prd.type';
+import type { Item } from '@/shared/types/prd.type';
 
+// Dapur only chooses item + qty — supplier and price are filled in by the
+// server from the item master (koperasi decides those, not Dapur).
 interface OrderLineForm {
   key: number;
   item_id: string;
-  supplier_id: string;
   qty_ordered: string;
-  estimated_price: string;
 }
 
 let nextKey = 1;
 
 function emptyLine(): OrderLineForm {
-  return { key: nextKey++, item_id: '', supplier_id: '', qty_ordered: '', estimated_price: '' };
+  return { key: nextKey++, item_id: '', qty_ordered: '' };
 }
 
-export default function DapurOrdersCreate({ items, suppliers }: { items: Item[]; suppliers: Supplier[] }) {
+const isFilled = (line: OrderLineForm) => Boolean(line.item_id && line.qty_ordered);
+
+export default function DapurOrdersCreate({ items }: { items: Item[] }) {
   const [lines, setLines] = useState<OrderLineForm[]>([emptyLine()]);
 
   const { data, setData, transform, post, processing, errors } = useForm({
     delivery_date: '',
     notes: '',
-    items: [] as { item_id: number; supplier_id: number; qty_ordered: number; estimated_price: number }[],
+    items: [] as { item_id: number; qty_ordered: number }[],
   });
+
+  const lineErrors = errors as Record<string, string | undefined>;
 
   const updateLine = (key: number, patch: Partial<OrderLineForm>) => {
     setLines((prev) => prev.map((line) => (line.key === key ? { ...line, ...patch } : line)));
-  };
-
-  const onPickItem = (key: number, itemId: string) => {
-    const item = items.find((i) => String(i.id) === itemId);
-    updateLine(key, {
-      item_id: itemId,
-      supplier_id: item?.default_supplier_id ? String(item.default_supplier_id) : '',
-      estimated_price: item?.base_selling_price ?? '',
-    });
   };
 
   const addLine = () => setLines((prev) => [...prev, emptyLine()]);
@@ -51,14 +46,10 @@ export default function DapurOrdersCreate({ items, suppliers }: { items: Item[];
   const submit: FormEventHandler = (e) => {
     e.preventDefault();
 
-    const payload = lines
-      .filter((line) => line.item_id && line.supplier_id && line.qty_ordered)
-      .map((line) => ({
-        item_id: Number(line.item_id),
-        supplier_id: Number(line.supplier_id),
-        qty_ordered: Number(line.qty_ordered),
-        estimated_price: Number(line.estimated_price || 0),
-      }));
+    const payload = lines.filter(isFilled).map((line) => ({
+      item_id: Number(line.item_id),
+      qty_ordered: Number(line.qty_ordered),
+    }));
 
     transform((formData) => ({ ...formData, items: payload }));
 
@@ -66,6 +57,9 @@ export default function DapurOrdersCreate({ items, suppliers }: { items: Item[];
       onSuccess: () => setLines([emptyLine()]),
     });
   };
+
+  // Server error keys (items.N.*) index into the submitted (filled) lines only.
+  const filledLines = lines.filter(isFilled);
 
   return (
     <>
@@ -102,32 +96,25 @@ export default function DapurOrdersCreate({ items, suppliers }: { items: Item[];
 
           {lines.map((line) => {
             const selectedItem = items.find((i) => String(i.id) === line.item_id);
+            const submittedIndex = filledLines.indexOf(line);
+            const itemError = submittedIndex >= 0 ? lineErrors[`items.${submittedIndex}.item_id`] : undefined;
+            const qtyError = submittedIndex >= 0 ? lineErrors[`items.${submittedIndex}.qty_ordered`] : undefined;
 
             return (
-              <div key={line.key} className="grid grid-cols-12 items-end gap-2 border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
-                <div className="col-span-4 flex flex-col gap-1">
+              <div key={line.key} className="grid grid-cols-12 items-start gap-2 border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
+                <div className="col-span-7 flex flex-col gap-1">
                   <Label>Item</Label>
                   <Combobox
                     value={line.item_id}
-                    onValueChange={(v) => onPickItem(line.key, v)}
+                    onValueChange={(v) => updateLine(line.key, { item_id: v })}
                     placeholder="Ketik untuk cari item..."
                     emptyText="Item tidak ditemukan."
                     options={items.map((item) => ({ value: String(item.id), label: `${item.name} (${item.satuan?.name})` }))}
                   />
+                  {itemError && <p className="text-xs text-red-500">{itemError}</p>}
                 </div>
 
-                <div className="col-span-3 flex flex-col gap-1">
-                  <Label>Supplier</Label>
-                  <Combobox
-                    value={line.supplier_id}
-                    onValueChange={(v) => updateLine(line.key, { supplier_id: v })}
-                    placeholder="Ketik untuk cari supplier..."
-                    emptyText="Supplier tidak ditemukan."
-                    options={suppliers.map((supplier) => ({ value: String(supplier.id), label: supplier.name }))}
-                  />
-                </div>
-
-                <div className="col-span-2 flex flex-col gap-1">
+                <div className="col-span-4 flex flex-col gap-1">
                   <Label>Qty {selectedItem ? `(${selectedItem.satuan?.name})` : ''}</Label>
                   <Input
                     type="number"
@@ -136,20 +123,10 @@ export default function DapurOrdersCreate({ items, suppliers }: { items: Item[];
                     value={line.qty_ordered}
                     onChange={(e) => updateLine(line.key, { qty_ordered: e.target.value })}
                   />
+                  {qtyError && <p className="text-xs text-red-500">{qtyError}</p>}
                 </div>
 
-                <div className="col-span-2 flex flex-col gap-1">
-                  <Label>Estimasi Harga</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={line.estimated_price}
-                    onChange={(e) => updateLine(line.key, { estimated_price: e.target.value })}
-                  />
-                </div>
-
-                <div className="col-span-1 flex justify-end">
+                <div className="col-span-1 flex justify-end pt-6">
                   <Button type="button" variant="ghost" size="icon" onClick={() => removeLine(line.key)} disabled={lines.length === 1}>
                     <Trash2 className="h-4 w-4 text-red-500" />
                   </Button>

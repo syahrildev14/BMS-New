@@ -18,9 +18,14 @@
 <body>
     <h1>TANDA TERIMA — {{ $suratJalan->sj_number }}</h1>
     <p class="muted">
-        Order: {{ $suratJalan->order->order_number }} &middot;
-        Dapur: {{ $suratJalan->order->dapur->name }} ({{ $suratJalan->order->dapur->code }}) &middot;
-        Tanggal Kirim: {{ $suratJalan->order->delivery_date->format('d-m-Y') }}
+        @php
+            $dapur = $suratJalan->dapur ?? $suratJalan->order?->dapur;
+            $shipmentDate = $suratJalan->shipment_date ?? $suratJalan->order?->delivery_date;
+        @endphp
+        Order: {{ $suratJalan->orderItems->pluck('order.order_number')->unique()->implode(', ') }} &middot;
+        Dapur: {{ $dapur?->name }} ({{ $dapur?->code }}) &middot;
+        Supplier: {{ $suratJalan->supplier?->name ?? '-' }} &middot;
+        Tanggal Kirim: {{ $shipmentDate?->format('d-m-Y') }}
     </p>
 
     <table>
@@ -59,7 +64,7 @@
     <table class="signatures">
         <tr>
             <td style="width: 50%;">
-                <div class="signature-line">Diserahkan oleh (Pengemudi)</div>
+                <div class="signature-line">Diserahkan oleh ({{ $suratJalan->document_type === \App\Models\SuratJalan::TANDA_TERIMA ? 'Supplier' : 'Pengemudi' }})</div>
             </td>
             <td style="width: 50%;">
                 <div class="signature-line">Diterima &amp; Dikonfirmasi oleh (Dapur)</div>

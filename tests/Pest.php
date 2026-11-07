@@ -81,6 +81,16 @@ function makeSatuan(array $attrs = []): Satuan
 
 function makeGudang(array $attrs = []): Gudang
 {
+    // The default-Gudang migration always seeds one row, and the app assumes
+    // a single central Gudang (Gudang::firstOrFail()) — reuse it.
+    $existing = Gudang::query()->first();
+
+    if ($existing) {
+        $existing->update($attrs);
+
+        return $existing;
+    }
+
     return Gudang::create(array_merge([
         'code' => 'GDG-'.Str::random(6),
         'name' => 'Gudang Test',

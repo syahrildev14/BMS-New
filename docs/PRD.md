@@ -58,7 +58,8 @@ Struktur tabel utama untuk diimplementasikan via Laravel Migrations:
 ### 2.3 Order, Delivery & Billing Tables
 - **`daily_prices`**: id, item_id (FK, **WET_GOODS saja**), date (DATE), cost_price (DECIMAL 12,2), calculated_price (DECIMAL 12,2), created_by (FK User), timestamps. *Unique Index: (item_id, date)*.
 - **`orders`**: id, order_number (unique), dapur_id (FK), delivery_date (DATE), status (`DRAFT`, `SUBMITTED`, `LOCKED`, `PROCESSING`, `DELIVERED`, `COMPLETED`, `CANCELLED`), notes, timestamps. *Transisi ke `LOCKED` lihat §Module 3.*
-- **`surat_jalans`**: id, sj_number (unique), order_id (FK), type (`PRIMARY`, `ADDON`), sequence_number (INT default 1), printed_by (FK User), created_at, timestamps.
+- **`surat_jalans`** *(dokumen pengiriman, direvisi 2026-11-05)*: id, sj_number (unique), document_type (`SURAT_JALAN`, `TANDA_TERIMA`), order_id (FK nullable, legacy), dapur_id (FK), supplier_id (FK), shipment_date (DATE), type (`PRIMARY`, `ADDON`), sequence_number (INT default 1), pdf_url, tanda_terima_pdf_url, verification_status (`PENDING`, `VERIFIED`, `DISCREPANCY`), verification_notes, verified_by (FK User nullable), verified_at, printed_by (FK User), timestamps. Lihat §Module 3 & 4.
+- **`delivery_document_photos`** *(2026-11-07)*: id, surat_jalan_id (FK), path, original_name, uploaded_by (FK User), timestamps.
 - **`order_items`**: id, order_id (FK), item_id (FK), supplier_id (FK - denormalized), surat_jalan_id (FK nullable - references `surat_jalans`), is_addon (boolean), qty_ordered (DECIMAL 10,2), qty_received (DECIMAL 10,2 nullable), qty_rejected (DECIMAL 10,2 nullable), rejection_reason (text nullable), estimated_price (DECIMAL 12,2), final_cost_price (DECIMAL 12,2 nullable), final_selling_price (DECIMAL 12,2 nullable), timestamps. *Tidak ada kolom status per-item — lihat §Module 1 Tier 2 untuk cara melacak status revisi.*
 - **`audit_logs`**: id, user_id (FK), action, description, old_data (JSON), new_data (JSON), timestamps.
 - **`invoices`**: id, invoice_number (unique), order_id (FK), dapur_id (FK), supplier_id (FK), total_amount (DECIMAL 12,2), status (`DRAFT`, `ISSUED`, `PAID`, `OVERDUE`, `VOID`), pdf_url, timestamps. *Unique Index: (order_id, supplier_id).*
@@ -67,6 +68,8 @@ Struktur tabel utama untuk diimplementasikan via Laravel Migrations:
 - **`purchase_orders`**: id, po_number (unique), supplier_id (FK), gudang_id (FK), triggered_by_order_id (FK nullable, Order yang memicu PO ini), status (`DRAFT`, `SENT`, `PARTIALLY_RECEIVED`, `RECEIVED`, `CANCELLED`), created_by (FK User), sent_by (FK User, nullable), sent_at (nullable), timestamps.
 - **`purchase_order_items`**: id, purchase_order_id (FK), item_id (FK), qty_ordered (DECIMAL 10,2), qty_received (DECIMAL 10,2 default 0), unit_cost (DECIMAL 12,2), timestamps.
 - **`stock_lots`**: id, gudang_id (FK), item_id (FK), purchase_order_item_id (FK nullable), qty_received (DECIMAL 10,2), qty_remaining (DECIMAL 10,2), unit_cost (DECIMAL 12,2), received_at (datetime), timestamps. *Sumber kebenaran stok: `SUM(qty_remaining)` per (gudang, item) — tidak ada tabel saldo terpisah.*
+- **`purchase_notes`** *(2026-11-05, §Module 5)*: id, note_number (unique), reference_number (nullable), category (`DRY_GOODS`, `WET_GOODS`), supplier_id (FK), surat_jalan_id (FK nullable, unique), dapur_id (FK nullable), note_date (DATE), total_amount (DECIMAL 12,2), has_discrepancy (boolean), notes, created_by (FK User), timestamps.
+- **`purchase_note_items`** *(2026-11-05)*: id, purchase_note_id (FK), item_id (FK), order_item_id (FK nullable), qty (DECIMAL 10,2), unit_price (DECIMAL 12,2), subtotal (DECIMAL 12,2), timestamps. `stock_lots` juga punya purchase_note_item_id (FK nullable).
 - **`stock_movements`**: id, gudang_id (FK), item_id (FK), stock_lot_id (FK nullable), type (`PURCHASE_IN`, `ORDER_OUT`, `OPNAME_ADJUST`), qty (DECIMAL 10,2), reference_type, reference_id, created_by (FK User), timestamps. *Jejak audit tiap stok masuk/keluar.*
 
 ---
@@ -92,21 +95,24 @@ Struktur tabel utama untuk diimplementasikan via Laravel Migrations:
   1. Hitung harga jual harian ($\text{Cost} + \text{Margin}$) dan kunci pada `order_items` milik Order berstatus `LOCKED` untuk tanggal pengiriman yang sama.
   2. Perbarui `base_cost_price` dan `base_selling_price` di tabel `items` secara otomatis untuk estimasi katalog H+1 bagi Dapur.
 
-### MODULE 3: MULTI-DELIVERY NOTE ENGINE (SURAT JALAN UTAMA & SUSULAN)
-- **Kewenangan:** Hanya **Tim Ops** yang menerbitkan Surat Jalan (pemisahan tugas dari Finance, yang menangani penagihan di §Module 4).
-- **Primary Delivery Note Generation:**
-  - Tim Ops menekan tombol *Generate Surat Jalan* pada sebuah Order untuk pertama kalinya.
-  - Sistem mengunci seluruh item yang belum memiliki SJ (`surat_jalan_id IS NULL`), menerbitkan `surat_jalans` baru berjenis `PRIMARY`, dan menyambungkan ID SJ ke item terkait.
-  - **Order yang Order-nya masih `SUBMITTED` otomatis berubah ke status `LOCKED`** pada titik ini — ini pemicu resmi status `LOCKED` yang dirujuk Module 2 (v5.0.0 tidak pernah menentukan titik pemicu ini secara eksplisit).
-- **Gating Stok untuk DRY_GOODS:** Sebelum item DRY_GOODS dimasukkan ke Surat Jalan, sistem memeriksa stok Gudang (§Module 5). Item dengan stok cukup langsung ikut diterbitkan; item dengan stok kurang **ditahan** (tetap `surat_jalan_id IS NULL`) dan memicu draft Purchase Order otomatis. WET_GOODS tidak melalui pengecekan ini.
-- **Add-on Delivery Note Generation (H+1/H+2):**
-  - Jika Dapur menambah item susulan baru di luar jadwal utama, atau item DRY_GOODS yang sempat ditahan karena stok kurang kini sudah tersedia, sistem mendeteksi item bernilai `surat_jalan_id IS NULL`.
-  - Sistem menerbitkan `surat_jalans` baru berjenis `ADDON` khusus untuk item tambahan tersebut tanpa mengganggu Surat Jalan utama yang sudah berjalan di lapangan.
-- **Idempotency & Double-Click Guard:**
-  - Menggunakan `DB::transaction()` dan `lockForUpdate()` di backend serta *disabled state* tombol di frontend untuk mengeliminasi potensi penggandaan nomor Surat Jalan.
+### MODULE 3: DOKUMEN PENGIRIMAN PER DAPUR + SUPPLIER (SURAT JALAN KERING & TANDA TERIMA BASAH) *(direvisi 2026-11-05)*
+- **Kewenangan:** Hanya **Tim Ops** yang menerbitkan dokumen pengiriman (pemisahan tugas dari Finance, §Module 4).
+- **Dua jenis dokumen** (`surat_jalans.document_type`):
+  - `SURAT_JALAN` — **bahan kering** yang dikirim koperasi dari Gudang. Ops memilih Dapur dan "kirim semua order s.d. tanggal X": semua item DRY_GOODS yang belum terkirim dari order-order Dapur itu (`delivery_date <= X`) digabung, **satu dokumen per supplier** (mis. KOP MERAH PUTIH). Mendukung pengiriman serentak hari Minggu untuk beberapa order harian, maupun pengiriman di hari H. PDF berisi Surat Jalan + form Tanda Terima.
+  - `TANDA_TERIMA` — **bahan basah** yang dikirim langsung supplier. Diterbitkan **setiap hari**, satu per Dapur per supplier untuk `delivery_date = tanggal kirim`. Supplier membawa dokumen ini dan Dapur menandatanganinya. WET_GOODS tidak pernah masuk Surat Jalan.
+- **Tautan item:** `order_items.surat_jalan_id` menautkan item ke dokumen; satu dokumen bisa mencakup item dari beberapa Order. `surat_jalans.order_id` hanya untuk data lama.
+- **PRIMARY / ADDON:** dokumen pertama untuk (Dapur, Supplier, jenis, tanggal kirim) = `PRIMARY`; dokumen berikutnya untuk kombinasi yang sama (item susulan, atau item kering yang sempat ditahan) = `ADDON`.
+- **Nomor:** `SJ/{YYYYMMDD}/{DAPUR_CODE}/{SUPP_CODE}/{nn}` dan `TT/{YYYYMMDD}/{DAPUR_CODE}/{SUPP_CODE}/{nn}`.
+- **Status `LOCKED`:** Order berstatus `DRAFT`/`SUBMITTED` otomatis menjadi `LOCKED` saat salah satu itemnya pertama kali masuk dokumen pengiriman — pemicu resmi yang dirujuk Module 2. Baris basah yang belum berharga mengambil Harga Harian tanggal kirimnya saat masuk dokumen.
+- **Gating Stok DRY_GOODS:** stok Gudang dinilai sekaligus untuk semua order dalam satu pengiriman, order dengan `delivery_date` paling awal mendapat stok lebih dulu. Item yang stoknya kurang **ditahan** (`surat_jalan_id IS NULL`) dan muncul di Daftar Belanja Kering (§Module 5).
+- **Revisi Tier 2** yang belum disetujui Ops tidak pernah ikut dokumen.
+- **Idempotency & Double-Click Guard:** `DB::transaction()` + `lockForUpdate()` pada baris `order_items`, retry nomor dokumen pada duplicate key, dan tombol frontend *disabled* saat proses.
+- **Akses Dapur:** Dapur mengunduh dokumen per dokumen dari detail Order; akses dibatasi `surat_jalans.dapur_id`.
 
 ### MODULE 4: STT QC PASS/REJECT & RECONCILED SPLIT BILLING
 - **Dapur STT Input:** Dapur menginput data penerimaan barang berdasarkan Surat Tanda Terima (STT) fisik (`qty_received` & `qty_rejected`) untuk setiap `order_item` yang sudah memiliki Surat Jalan (`surat_jalan_id IS NOT NULL`). Input ini wajib ada sebelum Order tersebut bisa ditagih — lihat status implementasi di §5.
+- **Foto Kedatangan & Crosscheck H+1 *(2026-11-07)*:** Dapur mengunggah foto per dokumen pengiriman (`delivery_document_photos`, JPG/PNG/WebP, maks. 5 MB, maks. 10 per dokumen; privat). Tim koperasi (permission `delivery-verifications.manage`) mencocokkan qty pesan, STT, nota (khusus TT basah), dan foto, lalu menandai dokumen `VERIFIED` (butuh STT lengkap) atau `DISCREPANCY` (catatan wajib). Invoice ditolak selama ada dokumen ber-`supplier_id` di Order itu yang belum `VERIFIED`; dokumen lama tanpa supplier dikecualikan. STT & foto terkunci setelah `VERIFIED`. Membuka kembali dari `VERIFIED` ditolak bila invoice atau tagihan supplier sudah ISSUED/OVERDUE/PAID. Status `DISCREPANCY` mem-`VOID` invoice dan tagihan supplier DRAFT terkait. Persetujuan invoice memeriksa ulang syarat ini. Foto tidak wajib untuk verifikasi. Cek bersama akuntan dapur tidak dicatat di sistem.
+- **Status `COMPLETED`:** Order selesai saat semua invoice-nya terbit **dan** tidak ada baris yang belum masuk dokumen pengiriman.
 - **Reconciled Split Billing Execution:**
   - Tim Finance menekan *Generate Split Invoices*.
   - Sistem merekonsiliasi seluruh Surat Jalan (Utama + Susulan) di bawah `Order ID` yang sama, mengelompokkannya per `supplier_id`, dan menghitung tagihan **hanya dari item yang lolos QC**:
@@ -116,7 +122,12 @@ Struktur tabel utama untuk diimplementasikan via Laravel Migrations:
 ### MODULE 5: GUDANG & PURCHASING *(baru, v5.1.0)*
 Mengelola buffer stok untuk barang `DRY_GOODS` — barang yang tidak perlu/tidak boleh dibeli dadakan setiap hari (beda dengan `WET_GOODS` yang tetap langsung dari Supplier, §Module 2).
 
-- **Pemicu Otomatis:** Saat Ops men-generate Surat Jalan (§Module 3) dan stok Gudang untuk suatu item DRY_GOODS tidak cukup, sistem membuat **draft Purchase Order** ke `default_supplier_id` item tersebut untuk seluruh kuantitas yang kurang pada baris itu (tidak ada pemenuhan sebagian pada satu baris `order_item` — baris itu ditahan penuh sampai stok cukup).
+- **Revisi 2026-11-05 — Belanja langsung dengan Nota (menggantikan draft PO otomatis):** bahan kering dibeli langsung oleh staf koperasi (mis. hari Sabtu). Sistem **tidak lagi membuat draft Purchase Order otomatis**; menu PO Purchasing & "Terima Barang" Gudang disembunyikan (data/halaman PO lama tetap ada untuk riwayat).
+  - **Daftar Belanja Kering:** kebutuhan DRY_GOODS semua dapur yang belum terkirim (order s.d. tanggal kirim tertentu, bukan pending Tier 2) dikurangi stok Gudang = jumlah yang perlu dibeli; bisa dicetak.
+  - **Nota Pembelian kering** (`purchase_notes` + `purchase_note_items`, category `DRY_GOODS`): tiap baris membuat `stock_lots` baru (harga nota, `purchase_note_item_id`) + `stock_movements` `PURCHASE_IN`; harga master barang diperbarui ke harga nota. Koreksi nota hanya selama lot-nya belum terpakai.
+  - **Nota Pembelian basah** (category `WET_GOODS`): satu per Tanda Terima (§Module 3). Harga nota menjadi `final_cost_price` baris pesanan itu (harga jual = margin), sehingga harga bisa berbeda per dapur; `daily_prices` & harga master diperbarui ke harga nota terakhir; selisih qty nota vs pesanan ditandai `has_discrepancy`. Nota (baru maupun koreksi) ditolak setelah invoice atau tagihan supplier terkait ISSUED/OVERDUE/PAID, dan mem-`VOID` yang masih DRAFT. Baris dengan qty 0 tidak mengubah harga harian/master, dan nota bertanggal lebih lama tidak memundurkan harga master. Input Harga Harian manual (§Module 2) tidak menimpa baris yang sudah berharga nota.
+  - Permission: `purchase-notes.manage` (role Purchasing & Admin).
+- **~~Pemicu Otomatis~~ (dihentikan 2026-11-05):** Saat Ops men-generate Surat Jalan (§Module 3) dan stok Gudang untuk suatu item DRY_GOODS tidak cukup, sistem membuat **draft Purchase Order** ke `default_supplier_id` item tersebut untuk seluruh kuantitas yang kurang pada baris itu (tidak ada pemenuhan sebagian pada satu baris `order_item` — baris itu ditahan penuh sampai stok cukup).
 - **Review & Kirim PO:** Tim Purchasing meninjau draft PO (boleh menyesuaikan qty/harga), lalu mengirimkannya ke Supplier (`DRAFT` → `SENT`).
 - **Penerimaan Barang:** Tim Gudang mencatat barang yang diterima fisik dari PO yang `SENT`/`PARTIALLY_RECEIVED` — setiap penerimaan membuat satu `stock_lots` baru (qty + harga beli aktual) dan memperbarui status PO (`PARTIALLY_RECEIVED` atau `RECEIVED` bila semua baris lunas).
 - **Konsumsi FIFO:** Saat Surat Jalan diterbitkan, stok DRY_GOODS ditarik dari `stock_lots` tertua (`received_at` paling awal) dulu. Harga pokok (`final_cost_price`) pada `order_items` adalah biaya rata-rata tertimbang dari lot-lot yang terpakai; `final_selling_price` dihitung dari margin item seperti biasa.

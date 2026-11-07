@@ -2,6 +2,7 @@
 
 use App\Models\PurchaseOrder;
 use App\Models\StockLot;
+use App\Models\SuratJalan;
 use App\Models\User;
 use App\Services\DeliveryNoteService;
 use App\Services\RevisionGateService;
@@ -47,18 +48,20 @@ it('holds back one of two same-item order lines instead of crashing when combine
     // Must NOT throw — stock (10) can't cover both rows (6+6=12), but it
     // can fully cover the first one, so the SJ should still go out for that
     // row instead of failing the whole batch.
-    $result = $service->generateSuratJalan($order->id, $opsUser->id);
+    $result = $service->generateDocuments($dapur->id, SuratJalan::SURAT_JALAN, '2030-01-15', $opsUser->id);
 
-    expect($result['surat_jalan'])->not->toBeNull();
+    expect($result['documents'])->toHaveCount(1);
+    expect($result['held_items'])->toHaveCount(1);
 
     $firstRow->refresh();
     $secondRow->refresh();
 
-    expect($firstRow->surat_jalan_id)->toBe($result['surat_jalan']->id);
+    expect($firstRow->surat_jalan_id)->toBe($result['documents']->first()->id);
     expect($secondRow->surat_jalan_id)->toBeNull();
 
     $lot = StockLot::where('item_id', $item->id)->first();
     expect((float) $lot->qty_remaining)->toBe(4.0);
 
-    expect(PurchaseOrder::where('triggered_by_order_id', $order->id)->exists())->toBeTrue();
+    // Shortages no longer draft POs — they surface on the Daftar Belanja.
+    expect(PurchaseOrder::count())->toBe(0);
 });

@@ -55,7 +55,8 @@ export const menuConfig: MenuItem[] = [
     label: 'Ops',
     icon: Truck,
     children: [
-      { label: 'Surat Jalan', href: '/ops/delivery-notes', permission: 'delivery-notes.manage' },
+      { label: 'Pengiriman (SJ & TT)', href: '/ops/delivery-notes', permission: 'delivery-notes.manage' },
+      { label: 'Crosscheck H+1', href: '/ops/verifications', permission: 'delivery-verifications.manage' },
       { label: 'Approval Revisi', href: '/ops/revisions', permission: 'revisions.approve' },
     ],
   },
@@ -63,14 +64,17 @@ export const menuConfig: MenuItem[] = [
     label: 'Purchasing',
     icon: ShoppingCart,
     children: [
-      { label: 'Purchase Order', href: '/purchasing/purchase-orders', permission: 'purchase-orders.manage' },
+      { label: 'Daftar Belanja Kering', href: '/purchasing/shopping-list', permission: 'purchase-notes.manage' },
+      { label: 'Nota Pembelian', href: '/purchasing/purchase-notes', permission: 'purchase-notes.manage' },
+      // Purchase Order & Gudang "Terima Barang" menus are retired (2026-11-05):
+      // dry goods are bought directly with a nota. Their pages/routes remain
+      // reachable for historical POs.
     ],
   },
   {
     label: 'Gudang',
     icon: Warehouse,
     children: [
-      { label: 'Terima Barang', href: '/gudang/purchase-orders', permission: 'stock.manage' },
       { label: 'Stok Barang', href: '/gudang/stock', permission: 'stock.manage' },
     ],
   },

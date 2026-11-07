@@ -4,8 +4,10 @@ namespace Database\Seeders;
 
 use App\Models\Item;
 use App\Models\Order;
+use App\Models\SuratJalan;
 use App\Models\User;
 use App\Services\DeliveryNoteService;
+use App\Services\DeliveryVerificationService;
 use App\Services\PricingEngineService;
 use App\Services\RevisionGateService;
 use App\Services\SplitInvoiceService;
@@ -17,8 +19,8 @@ use Illuminate\Support\Collection;
  * Builds a full demo dataset entirely through the real services
  * (RevisionGateService, DeliveryNoteService, SplitInvoiceService) instead of
  * hand-crafted rows, so every page in the app has realistic, internally
- * consistent data: Tier 1/2/3 revisions, Primary+Addon Surat Jalan, a live
- * stock-shortfall draft PO, and a fully billed Order with real invoice PDFs.
+ * consistent data: Tier 1/2/3 revisions, Primary+Addon documents, dry lines held
+ * for low stock, and a verified Order with draft invoices.
  */
 class OrderSeeder extends Seeder
 {
@@ -39,6 +41,7 @@ class OrderSeeder extends Seeder
         $revisionGate = app(RevisionGateService::class);
         $deliveryNotes = app(DeliveryNoteService::class);
         $splitInvoice = app(SplitInvoiceService::class);
+        $verification = app(DeliveryVerificationService::class);
 
         $today = Carbon::now('Asia/Jakarta')->startOfDay();
 
@@ -51,15 +54,15 @@ class OrderSeeder extends Seeder
         ]), $dapurUsers[1], $today->copy()->setTime(10, 0));
 
         // Order #2 — Tier 1, then Ops generates SJ: Tepung Terigu is short on
-        // stock (seeded at 5kg, order wants 20kg) so it's held back and an
-        // auto-draft PO is raised to Purchasing for the full line.
+        // stock (seeded at 5kg, order wants 20kg) so it's held back and shows
+        // up on Purchasing's Daftar Belanja.
         $order2 = $this->createOrder($dapurUsers[2], $today->copy()->addDays(2));
         $revisionGate->submitRevision($order2, $this->payload([
             ['sku' => 'BRG-001', 'qty' => 30],
             ['sku' => 'BRG-003', 'qty' => 20],
             ['sku' => 'BRG-010', 'qty' => 15],
         ]), $dapurUsers[2], $today->copy()->setTime(9, 0));
-        $deliveryNotes->generateSuratJalan($order2->id, $ops->id);
+        $this->issueDocuments($deliveryNotes, $order2, $ops);
 
         // Order #3 — Tier 1, Primary SJ, then a same-day-ish add-on item gets
         // its own Addon SJ, then full STT receipt, then split-billed across
@@ -70,17 +73,15 @@ class OrderSeeder extends Seeder
             ['sku' => 'BRG-004', 'qty' => 10],
             ['sku' => 'BRG-011', 'qty' => 10],
         ]), $dapurUsers[3], $today->copy()->setTime(8, 0));
-        $deliveryNotes->generateSuratJalan($order3->id, $ops->id);
+        $this->issueDocuments($deliveryNotes, $order3, $ops);
 
         $revisionGate->submitRevision($order3, $this->payload([
             ['sku' => 'BRG-002', 'qty' => 5],
         ]), $dapurUsers[3], $today->copy()->setTime(11, 0));
-        $deliveryNotes->generateSuratJalan($order3->id, $ops->id);
+        $this->issueDocuments($deliveryNotes, $order3, $ops);
 
-        // WET_GOODS lines never get a final_selling_price at SJ-generation
-        // time (DeliveryNoteService only prices DRY_GOODS there) — they rely
-        // entirely on PricingEngineService having synced that specific
-        // delivery_date already. DailyPriceSeeder only covered "today", so
+        // WET_GOODS lines only get a final_selling_price from a nota or a
+        // daily price for that specific delivery_date. DailyPriceSeeder only covered "today", so
         // sync the dates these now-LOCKED demo Orders actually need before
         // billing order #3, or its WET_GOODS lines would invoice as Rp 0.
         $this->syncWetGoodsPricesFor([$order2, $order3]);
@@ -88,6 +89,7 @@ class OrderSeeder extends Seeder
         $order3->orderItems()->whereNotNull('surat_jalan_id')->get()->each(
             fn ($orderItem) => $orderItem->update(['qty_received' => $orderItem->qty_ordered, 'qty_rejected' => 0])
         );
+        $order3->fresh()->suratJalans->each(fn (SuratJalan $document) => $verification->verify($document, $ops));
         $splitInvoice->generateInvoicesForOrder($order3->fresh());
 
         // Order #4 — Tier 1 base order, then a same-day emergency add-on
@@ -108,6 +110,18 @@ class OrderSeeder extends Seeder
             ['sku' => 'BRG-011', 'qty' => 8],
             ['sku' => 'BRG-018', 'qty' => 10],
         ]), $dapurUsers[5], $today->copy()->setTime(19, 0));
+    }
+
+    /** Issues whichever documents have pending lines: Surat Jalan (dry) and Tanda Terima (wet). */
+    private function issueDocuments(DeliveryNoteService $deliveryNotes, Order $order, User $ops): void
+    {
+        $date = $order->delivery_date->toDateString();
+
+        foreach ([SuratJalan::SURAT_JALAN, SuratJalan::TANDA_TERIMA] as $documentType) {
+            if ($deliveryNotes->pendingGroups($order->dapur_id, $documentType, $date)->isNotEmpty()) {
+                $deliveryNotes->generateDocuments($order->dapur_id, $documentType, $date, $ops->id);
+            }
+        }
     }
 
     /**

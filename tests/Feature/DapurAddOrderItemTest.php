@@ -1,7 +1,6 @@
 <?php
 
-use App\Models\User;
-use App\Services\RevisionGateService;
+use App\Models\AuditLog;
 use Carbon\Carbon;
 use Database\Seeders\RoleAndPermissionSeeder;
 
@@ -10,7 +9,7 @@ it('adds a Tier 1 item to an existing Order without needing Ops approval', funct
     makeGudang();
     $dapur = makeDapur();
     $supplier = makeSupplier();
-    $item = makeItem(['category' => 'WET_GOODS']);
+    $item = makeItem(['category' => 'WET_GOODS', 'default_supplier_id' => $supplier->id]);
     $dapurUser = makeUserWithRole('dapur', ['dapur_id' => $dapur->id]);
     $order = makeOrder($dapur, ['status' => 'SUBMITTED', 'delivery_date' => '2030-01-15']);
 
@@ -35,7 +34,7 @@ it('adds a Tier 2 item that lands in the Ops approval queue instead of being con
     makeGudang();
     $dapur = makeDapur();
     $supplier = makeSupplier();
-    $item = makeItem(['category' => 'WET_GOODS']);
+    $item = makeItem(['category' => 'WET_GOODS', 'default_supplier_id' => $supplier->id]);
     $dapurUser = makeUserWithRole('dapur', ['dapur_id' => $dapur->id]);
     $order = makeOrder($dapur, ['status' => 'SUBMITTED', 'delivery_date' => '2030-01-15']);
 
@@ -49,7 +48,7 @@ it('adds a Tier 2 item that lands in the Ops approval queue instead of being con
 
     $response->assertSessionHasNoErrors();
 
-    $pendingIds = \App\Models\AuditLog::pendingOrderItemIds($order->id);
+    $pendingIds = AuditLog::pendingOrderItemIds($order->id);
     $order->refresh();
     expect($order->orderItems)->toHaveCount(1);
     expect($pendingIds)->toHaveCount(1);
@@ -60,7 +59,7 @@ it('refuses to add items to another dapur\'s Order', function () {
     $dapurA = makeDapur();
     $dapurB = makeDapur();
     $supplier = makeSupplier();
-    $item = makeItem(['category' => 'WET_GOODS']);
+    $item = makeItem(['category' => 'WET_GOODS', 'default_supplier_id' => $supplier->id]);
     $dapurUserA = makeUserWithRole('dapur', ['dapur_id' => $dapurA->id]);
     $orderB = makeOrder($dapurB, ['status' => 'SUBMITTED', 'delivery_date' => '2030-01-15']);
 
@@ -77,7 +76,7 @@ it('refuses to add items to a CANCELLED or COMPLETED Order', function () {
     $this->seed(RoleAndPermissionSeeder::class);
     $dapur = makeDapur();
     $supplier = makeSupplier();
-    $item = makeItem(['category' => 'WET_GOODS']);
+    $item = makeItem(['category' => 'WET_GOODS', 'default_supplier_id' => $supplier->id]);
     $dapurUser = makeUserWithRole('dapur', ['dapur_id' => $dapur->id]);
     $order = makeOrder($dapur, ['status' => 'CANCELLED', 'delivery_date' => '2030-01-15']);
 

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\DailyPrice;
 use App\Models\Item;
 use App\Models\OrderItem;
+use App\Models\PurchaseNoteItem;
 use Illuminate\Support\Facades\DB;
 
 class PricingEngineService
@@ -31,10 +32,14 @@ class PricingEngineService
                     ]
                 );
 
+                // Lines already priced from their own Nota Pembelian
+                // (PurchaseNoteService) keep that price — the manual daily
+                // price only fills lines that have no nota yet.
                 OrderItem::whereHas('order', function ($query) use ($date) {
                     $query->where('delivery_date', $date)->where('status', 'LOCKED');
                 })
                     ->where('item_id', $itemId)
+                    ->whereNotIn('id', PurchaseNoteItem::whereNotNull('order_item_id')->select('order_item_id'))
                     ->update([
                         'final_cost_price' => $costPrice,
                         'final_selling_price' => $calculatedSellingPrice,

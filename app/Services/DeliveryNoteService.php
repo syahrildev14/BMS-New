@@ -2,97 +2,29 @@
 
 namespace App\Services;
 
-use App\Jobs\GenerateOrderSuratJalanPdfJob;
 use App\Jobs\GenerateSuratJalanPdfJob;
 use App\Models\AuditLog;
+use App\Models\DailyPrice;
+use App\Models\Dapur;
 use App\Models\Gudang;
-use App\Models\Item;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\PurchaseOrder;
-use App\Models\PurchaseOrderItem;
+use App\Models\Supplier;
 use App\Models\SuratJalan;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class DeliveryNoteService
 {
     public function __construct(
         private readonly StockService $stockService,
-        private readonly PurchaseOrderService $purchaseOrderService,
     ) {}
-
-    /**
-     * Early stock-shortage detection: called right when an Order's items are
-     * confirmed (Tier 1 auto-merge, Tier 3 emergency override, or Tier 2
-     * approval — see RevisionGateService), not only when Ops happens to click
-     * "Generate Surat Jalan". Raising the draft PO here instead gives
-     * Purchasing the maximum possible lead time to restock before the
-     * delivery is actually due, instead of discovering the shortfall at the
-     * same moment Ops is trying to ship.
-     *
-     * Idempotent: an order_item already fully covered by the combined
-     * qty_ordered of its in-flight (DRAFT/SENT/PARTIALLY_RECEIVED) POs is left
-     * alone, so calling this again later (e.g. generateSuratJalan()'s own
-     * safety-net call) never double-drafts. If Purchasing has edited a draft
-     * PO's qty down below what the order actually needs, only the remaining
-     * gap is drafted — not the full qty again.
-     *
-     * @return array{purchase_orders: Collection<int, PurchaseOrder>, unresolved_shortfalls: Collection<int, OrderItem>}
-     */
-    public function checkStockShortfalls(Order $order, User $user): array
-    {
-        return DB::transaction(function () use ($order, $user) {
-            $gudang = Gudang::query()->firstOrFail();
-
-            $candidates = OrderItem::where('order_id', $order->id)
-                ->whereNull('surat_jalan_id')
-                ->whereNotIn('id', AuditLog::pendingOrderItemIds($order->id))
-                ->whereHas('item', fn ($query) => $query->where('category', 'DRY_GOODS'))
-                ->with('item')
-                ->lockForUpdate()
-                ->get();
-
-            $insufficientItems = $this->partitionByStock($candidates, $gudang->id)['insufficient'];
-
-            $shortfalls = collect();
-            $unresolvedShortfalls = collect();
-
-            foreach ($insufficientItems as $orderItem) {
-                $item = $orderItem->item;
-
-                $alreadyInFlight = $this->inFlightShortfallQty($order, $item);
-                $remainingNeeded = round((float) $orderItem->qty_ordered - $alreadyInFlight, 2);
-
-                if ($remainingNeeded <= 0.0001) {
-                    continue;
-                }
-
-                if ($item->default_supplier_id) {
-                    $shortfalls->push([
-                        'item_id' => $item->id,
-                        'supplier_id' => $item->default_supplier_id,
-                        'qty' => $remainingNeeded,
-                        'unit_cost' => (float) $item->base_cost_price,
-                    ]);
-                } else {
-                    $unresolvedShortfalls->push($orderItem);
-                }
-            }
-
-            if ($unresolvedShortfalls->isNotEmpty()) {
-                $this->logUnresolvedShortfalls($order, $user, $unresolvedShortfalls);
-            }
-
-            $purchaseOrders = $shortfalls->isNotEmpty()
-                ? $this->purchaseOrderService->generateDraftsForShortfall($order, $gudang, $shortfalls, $user)
-                : collect();
-
-            return ['purchase_orders' => $purchaseOrders, 'unresolved_shortfalls' => $unresolvedShortfalls];
-        });
-    }
 
     /**
      * Decides which DRY_GOODS OrderItem rows the Gudang's current stock can
@@ -102,8 +34,9 @@ class DeliveryNoteService
      * StockService::availableStock() re-query would let every sibling row
      * believe the same units of stock are theirs, since it never subtracts
      * what an earlier row in the same batch already claimed. Rows are
-     * claimed in ascending id (submission) order, so earlier rows get first
-     * claim on the stock over later ones.
+     * claimed by earliest Order delivery_date first, then ascending id
+     * (submission order) — a weekly shipment spans several Orders, and the
+     * soonest-needed lines must get the stock first.
      *
      * @param  Collection<int, OrderItem>  $orderItems
      * @return array{sufficient: Collection<int, OrderItem>, insufficient: Collection<int, OrderItem>}
@@ -114,7 +47,12 @@ class DeliveryNoteService
         $sufficient = collect();
         $insufficient = collect();
 
-        foreach ($orderItems->sortBy('id') as $orderItem) {
+        $ordered = $orderItems->sortBy([
+            fn (OrderItem $a, OrderItem $b) => $a->order->delivery_date <=> $b->order->delivery_date,
+            fn (OrderItem $a, OrderItem $b) => $a->id <=> $b->id,
+        ]);
+
+        foreach ($ordered as $orderItem) {
             $itemId = $orderItem->item_id;
 
             if (! array_key_exists($itemId, $remainingByItem)) {
@@ -123,8 +61,10 @@ class DeliveryNoteService
 
             $needed = (float) $orderItem->qty_ordered;
 
-            if ($remainingByItem[$itemId] >= $needed) {
-                $remainingByItem[$itemId] -= $needed;
+            // Same 0.0001 tolerance as StockService::deductFromLots(); rounded
+            // because 0.3 - 0.1 is 0.19999... in floating point.
+            if ($needed <= $remainingByItem[$itemId] + 0.0001) {
+                $remainingByItem[$itemId] = round($remainingByItem[$itemId] - $needed, 2);
                 $sufficient->push($orderItem);
             } else {
                 $insufficient->push($orderItem);
@@ -135,166 +75,228 @@ class DeliveryNoteService
     }
 
     /**
-     * Sum of qty_ordered across this order's in-flight (DRAFT/SENT/
-     * PARTIALLY_RECEIVED) PO lines for this item — not just "does one exist",
-     * since Purchasing can edit a draft PO's qty down below what's needed
-     * (see PurchaseOrderController::update) before sending it.
+     * Order items ready to go on a new delivery document for one Dapur,
+     * grouped by supplier_id.
+     *
+     *  - SURAT_JALAN  (dry goods, shipped by the koperasi): every unshipped
+     *    DRY_GOODS line of the Dapur's Orders delivering on or before $date,
+     *    so one weekly Sunday shipment can cover several daily Orders.
+     *  - TANDA_TERIMA (wet goods, delivered by the Supplier): WET_GOODS lines
+     *    of the Dapur's Orders delivering exactly on $date.
+     *
+     * Tier 2 lines still awaiting Ops approval are never included.
+     *
+     * @return Collection<int, Collection<int, OrderItem>> keyed by supplier_id
      */
-    private function inFlightShortfallQty(Order $order, Item $item): float
+    public function pendingGroups(int $dapurId, string $documentType, string $date): Collection
     {
-        return (float) PurchaseOrderItem::where('item_id', $item->id)
-            ->whereHas('purchaseOrder', fn ($query) => $query
-                ->where('triggered_by_order_id', $order->id)
-                ->whereIn('status', ['DRAFT', 'SENT', 'PARTIALLY_RECEIVED']))
-            ->sum('qty_ordered');
+        return $this->candidateQuery($dapurId, $documentType, $date)
+            ->with(['item.satuan', 'order', 'supplier'])
+            ->get()
+            ->groupBy('supplier_id');
     }
 
     /**
-     * @param  Collection<int, OrderItem>  $unresolvedShortfalls
+     * Issue one delivery document per supplier (or only for $supplierId) for
+     * the Dapur's pending lines (see pendingGroups() for which lines).
+     * DRY_GOODS lines are gated on Gudang stock (FIFO): a line the stock
+     * cannot fully cover is held back (stays surat_jalan_id NULL) until it is
+     * bought (Nota Pembelian) — it shows up on Purchasing's Daftar Belanja.
+     *
+     * @return array{documents: Collection<int, SuratJalan>, held_items: Collection<int, OrderItem>}
      */
-    private function logUnresolvedShortfalls(Order $order, User $user, Collection $unresolvedShortfalls): void
+    public function generateDocuments(int $dapurId, string $documentType, string $date, int $userId, ?int $supplierId = null): array
     {
-        AuditLog::create([
-            'user_id' => $user->id,
-            'action' => 'STOCK_SHORTFALL_NO_SUPPLIER',
-            'description' => "Order #{$order->id} ({$order->order_number}): item DRY_GOODS kurang stok tapi tidak punya default_supplier_id, draft PO tidak bisa dibuat otomatis.",
-            'new_data' => [
-                'order_id' => $order->id,
-                'items' => $unresolvedShortfalls->map(fn (OrderItem $oi) => [
-                    'order_item_id' => $oi->id,
-                    'item_id' => $oi->item_id,
-                    'item_name' => $oi->item->name,
-                    'qty_ordered' => (float) $oi->qty_ordered,
-                ])->values()->toArray(),
-            ],
-        ]);
-    }
+        if (! in_array($documentType, [SuratJalan::SURAT_JALAN, SuratJalan::TANDA_TERIMA], true)) {
+            throw new \InvalidArgumentException("Jenis dokumen tidak dikenal: {$documentType}.");
+        }
 
-    /**
-     * Generate the next Surat Jalan (PRIMARY for the first call, ADDON afterwards)
-     * for every order_item that is not yet attached to a Surat Jalan.
-     *
-     * WET_GOODS ship straight from the Supplier as before. DRY_GOODS are
-     * fulfilled from Gudang stock (FIFO) instead — an item short on stock is
-     * held back from this Surat Jalan (to go out later as an ADDON once
-     * stock arrives). checkStockShortfalls() is called here too as a safety
-     * net (it's idempotent), but the normal path already raised the draft PO
-     * earlier, when the Order's items were first confirmed.
-     *
-     * @return array{surat_jalan: ?SuratJalan, purchase_orders: Collection<int, PurchaseOrder>, unresolved_shortfalls: Collection<int, OrderItem>}
-     */
-    public function generateSuratJalan(int $orderId, int $userId): array
-    {
-        $result = DB::transaction(function () use ($orderId, $userId) {
+        $result = DB::transaction(function () use ($dapurId, $documentType, $date, $userId, $supplierId) {
             $user = User::findOrFail($userId);
-            $order = Order::where('id', $orderId)->lockForUpdate()->firstOrFail();
+            // Serializes all document generation for this Dapur, which is what
+            // keeps PRIMARY/ADDON and the daily number sequence correct under
+            // concurrent requests.
+            $dapur = Dapur::whereKey($dapurId)->lockForUpdate()->firstOrFail();
 
-            if (in_array($order->status, ['CANCELLED', 'COMPLETED'], true)) {
-                throw new \RuntimeException("Tidak bisa menerbitkan Surat Jalan untuk Order berstatus {$order->status}.");
-            }
-
-            $unassignedItems = OrderItem::where('order_id', $orderId)
-                ->whereNull('surat_jalan_id')
-                ->whereNotIn('id', AuditLog::pendingOrderItemIds($orderId))
-                ->with('item')
+            $candidates = $this->candidateQuery($dapurId, $documentType, $date)
+                ->with(['item', 'order', 'supplier'])
                 ->lockForUpdate()
                 ->get();
 
-            if ($unassignedItems->isEmpty()) {
-                throw new \RuntimeException('Tidak ada item baru yang perlu dibuatkan Surat Jalan (atau seluruhnya masih menunggu persetujuan revisi Tier 2).');
-            }
+            // Same row lock as SplitInvoiceService::approveInvoice(): an Order
+            // closed after the query above must not ship or consume stock.
+            $openOrderIds = Order::whereIn('id', $candidates->pluck('order_id')->unique())
+                ->lockForUpdate()
+                ->get()
+                ->reject(fn (Order $order) => in_array($order->status, ['CANCELLED', 'COMPLETED'], true))
+                ->pluck('id');
 
-            $gudang = Gudang::query()->firstOrFail();
-            $shortfallResult = $this->checkStockShortfalls($order, $user);
+            $candidates = $candidates->whereIn('order_id', $openOrderIds)->values();
+            $isRequested = fn (OrderItem $line) => $supplierId === null || (int) $line->supplier_id === $supplierId;
 
-            $dryGoodsItems = $unassignedItems->filter(fn (OrderItem $oi) => $oi->item->category === 'DRY_GOODS');
-            $otherItems = $unassignedItems->reject(fn (OrderItem $oi) => $oi->item->category === 'DRY_GOODS');
-
-            // DRY_GOODS rows the stock can't fully cover stay held back for a
-            // later ADDON SJ — already drafted/logged by
-            // checkStockShortfalls() above.
-            $toAssign = $otherItems->merge($this->partitionByStock($dryGoodsItems, $gudang->id)['sufficient']);
-
-            $purchaseOrders = $shortfallResult['purchase_orders'];
-            $unresolvedShortfalls = $shortfallResult['unresolved_shortfalls'];
+            $toAssign = $candidates->filter($isRequested)->values();
+            $heldItems = collect();
+            $gudang = null;
 
             if ($toAssign->isEmpty()) {
-                return ['surat_jalan' => null, 'purchase_orders' => $purchaseOrders, 'unresolved_shortfalls' => $unresolvedShortfalls];
+                throw new \RuntimeException('Tidak ada item yang perlu dibuatkan dokumen pengiriman untuk pilihan ini (atau seluruhnya masih menunggu persetujuan revisi Tier 2).');
             }
 
-            $existingSjCount = SuratJalan::where('order_id', $orderId)->count();
-            $sjType = $existingSjCount === 0 ? 'PRIMARY' : 'ADDON';
-            $sequence = $existingSjCount + 1; // per-Order sequence, stored in sequence_number
-
-            $suratJalan = $this->createSuratJalanWithUniqueNumber($order, $sjType, $sequence, $userId);
-
-            // Official LOCKED trigger (PRD §Module 3): the first PRIMARY Surat
-            // Jalan for an Order locks it, which is what lets PricingEngineService
-            // start syncing daily WET_GOODS prices onto its order_items.
-            if ($sjType === 'PRIMARY' && $order->status === 'SUBMITTED') {
-                $order->update(['status' => 'LOCKED']);
+            if ($documentType === SuratJalan::SURAT_JALAN) {
+                // Stock is judged across ALL Orders in this shipment at once
+                // (earliest delivery first) — per-Order checks would let two
+                // Orders each believe the same stock is theirs. Every supplier
+                // takes part even when generating for one, so lines of other
+                // suppliers keep their claim on stock for earlier deliveries.
+                $gudang = Gudang::query()->firstOrFail();
+                $partition = $this->partitionByStock($candidates, $gudang->id);
+                $toAssign = $partition['sufficient']->filter($isRequested)->values();
+                $heldItems = $partition['insufficient']->filter($isRequested)->values();
             }
 
-            foreach ($toAssign as $orderItem) {
-                $item = $orderItem->item;
-                $update = ['surat_jalan_id' => $suratJalan->id];
+            $documents = collect();
 
-                if ($item->category === 'DRY_GOODS') {
-                    $consumption = $this->stockService->consumeFifo(
-                        $gudang,
-                        $item,
-                        (float) $orderItem->qty_ordered,
-                        OrderItem::class,
-                        $orderItem->id,
-                        $user,
-                    );
+            foreach ($toAssign->groupBy('supplier_id') as $lines) {
+                $document = $this->createDocumentWithUniqueNumber(
+                    $dapur,
+                    $lines->first()->supplier,
+                    $documentType,
+                    $date,
+                    $userId,
+                );
 
-                    $update['final_cost_price'] = $consumption['weighted_unit_cost'];
-                    $update['final_selling_price'] = $item->calculateSellingPrice($consumption['weighted_unit_cost']);
+                foreach ($lines as $orderItem) {
+                    $this->attachToDocument($orderItem, $document, $user, $gudang);
                 }
 
-                $orderItem->update($update);
+                $documents->push($document);
             }
 
-            return ['surat_jalan' => $suratJalan, 'purchase_orders' => $purchaseOrders, 'unresolved_shortfalls' => $unresolvedShortfalls];
+            // Official LOCKED trigger: an Order locks as soon as any of its
+            // lines is on a delivery document. PricingEngineService only
+            // syncs daily WET_GOODS prices onto LOCKED Orders.
+            Order::whereIn('id', $toAssign->pluck('order_id')->unique())
+                ->whereIn('status', ['DRAFT', 'SUBMITTED'])
+                ->update(['status' => 'LOCKED']);
+
+            return ['documents' => $documents, 'held_items' => $heldItems];
         });
 
-        $this->dispatchSuratJalanPdfs($result['surat_jalan']);
+        // Already committed: stock is consumed and the documents exist, so a
+        // PDF failure must not surface as a failed generation. Rendered again
+        // on download, see ensurePdf().
+        foreach ($result['documents'] as $document) {
+            try {
+                GenerateSuratJalanPdfJob::dispatchSync($document->id);
+            } catch (Throwable $e) {
+                Log::error('Gagal generate PDF dokumen pengiriman.', [
+                    'surat_jalan_id' => $document->id,
+                    'exception' => $e,
+                ]);
+            }
+        }
 
         return $result;
     }
 
-    /**
-     * sj_number's daily-per-dapur sequence is read-then-write — two Surat
-     * Jalan for the same Dapur (different Orders, or the same Order's first
-     * PRIMARY SJ racing another Order's) generated in quick succession can
-     * both read the same count() and collide on the unique sj_number
-     * constraint. lockForUpdate() serializes against any already-committed
-     * row for that dapur/day, and the retry-on-duplicate-key loop covers the
-     * case where both transactions started with zero existing rows to lock
-     * in the first place — same approach as
-     * PurchaseOrderService::createPurchaseOrderWithUniqueNumber().
-     */
-    private function createSuratJalanWithUniqueNumber(Order $order, string $sjType, int $sequence, int $userId): SuratJalan
+    /** Renders the document PDF if it is missing, e.g. after a failed first attempt. */
+    public function ensurePdf(SuratJalan $document): SuratJalan
     {
+        if (! $document->pdf_url || ! Storage::disk('local')->exists($document->pdf_url)) {
+            GenerateSuratJalanPdfJob::dispatchSync($document->id);
+        }
+
+        return $document->refresh();
+    }
+
+    private function candidateQuery(int $dapurId, string $documentType, string $date): Builder
+    {
+        $category = $documentType === SuratJalan::SURAT_JALAN ? 'DRY_GOODS' : 'WET_GOODS';
+
+        return OrderItem::query()
+            ->whereNull('surat_jalan_id')
+            ->whereNotIn('id', AuditLog::allPendingOrderItemIds())
+            ->whereHas('item', fn ($query) => $query->where('category', $category))
+            ->whereHas('order', function ($query) use ($dapurId, $documentType, $date) {
+                $query->where('dapur_id', $dapurId)
+                    ->whereNotIn('status', ['CANCELLED', 'COMPLETED']);
+
+                if ($documentType === SuratJalan::SURAT_JALAN) {
+                    $query->whereDate('delivery_date', '<=', $date);
+                } else {
+                    $query->whereDate('delivery_date', $date);
+                }
+            })
+            ->orderBy('id');
+    }
+
+    private function attachToDocument(OrderItem $orderItem, SuratJalan $document, User $user, ?Gudang $gudang): void
+    {
+        $item = $orderItem->item;
+        $update = ['surat_jalan_id' => $document->id];
+
+        if ($item->category !== 'DRY_GOODS' && $orderItem->final_selling_price === null) {
+            // PricingEngineService only prices LOCKED Orders, so a daily price
+            // entered before this line was on a document hasn't reached it.
+            $dailyPrice = DailyPrice::where('item_id', $item->id)
+                ->whereDate('date', $orderItem->order->delivery_date->toDateString())
+                ->first();
+
+            if ($dailyPrice) {
+                $update['final_cost_price'] = $dailyPrice->cost_price;
+                $update['final_selling_price'] = $dailyPrice->calculated_price;
+            }
+        }
+
+        if ($item->category === 'DRY_GOODS') {
+            $consumption = $this->stockService->consumeFifo(
+                $gudang,
+                $item,
+                (float) $orderItem->qty_ordered,
+                OrderItem::class,
+                $orderItem->id,
+                $user,
+            );
+
+            $update['final_cost_price'] = $consumption['weighted_unit_cost'];
+            $update['final_selling_price'] = $item->calculateSellingPrice($consumption['weighted_unit_cost']);
+        }
+
+        $orderItem->update($update);
+    }
+
+    /**
+     * SJ/{YYYYMMDD}/{DAPUR}/{SUPP}/{nn} or TT/..., where nn is a daily
+     * sequence (Jakarta date) per (Dapur, document type). Generation holds the
+     * Dapur row lock, so this only retries on a stray duplicate key.
+     * The first document for a (Dapur, Supplier, type, shipment date) is
+     * PRIMARY; any later one for the same combination is an ADDON.
+     */
+    private function createDocumentWithUniqueNumber(Dapur $dapur, Supplier $supplier, string $documentType, string $date, int $userId): SuratJalan
+    {
+        $prefix = $documentType === SuratJalan::SURAT_JALAN ? 'SJ' : 'TT';
+
+        $sameShipmentCount = SuratJalan::where('dapur_id', $dapur->id)
+            ->where('supplier_id', $supplier->id)
+            ->where('document_type', $documentType)
+            ->whereDate('shipment_date', $date)
+            ->count();
+
         $maxAttempts = 5;
+        $datePrefix = sprintf('%s/%s/%s/', $prefix, now('Asia/Jakarta')->format('Ymd'), $dapur->code);
 
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-            $dailySequence = SuratJalan::whereHas('order', fn ($query) => $query->where('dapur_id', $order->dapur_id))
-                ->whereDate('created_at', now()->toDateString())
-                ->lockForUpdate()
-                ->count() + 1;
-
-            $sjCode = $sjType === 'PRIMARY'
-                ? sprintf('SJ/%s/%s/%02d', now()->format('Ymd'), $order->dapur->code, $dailySequence)
-                : sprintf('SJ-ADD/%s/%s/%02d', now()->format('Ymd'), $order->dapur->code, $dailySequence);
+            $dailySequence = SuratJalan::where('sj_number', 'like', "{$datePrefix}%")->count() + $attempt;
 
             try {
                 return SuratJalan::create([
-                    'sj_number' => $sjCode,
-                    'order_id' => $order->id,
-                    'type' => $sjType,
-                    'sequence_number' => $sequence,
+                    'sj_number' => sprintf('%s%s/%02d', $datePrefix, $supplier->code, $dailySequence),
+                    'document_type' => $documentType,
+                    'dapur_id' => $dapur->id,
+                    'supplier_id' => $supplier->id,
+                    'shipment_date' => $date,
+                    'type' => $sameShipmentCount === 0 ? 'PRIMARY' : 'ADDON',
+                    'sequence_number' => $sameShipmentCount + 1,
                     'printed_by' => $userId,
                 ]);
             } catch (QueryException $e) {
@@ -306,19 +308,6 @@ class DeliveryNoteService
             }
         }
 
-        throw new \RuntimeException('Gagal membuat nomor Surat Jalan unik setelah beberapa percobaan.');
-    }
-
-    private function dispatchSuratJalanPdfs(?SuratJalan $suratJalan): void
-    {
-        if (! $suratJalan) {
-            return;
-        }
-
-        GenerateSuratJalanPdfJob::dispatchSync($suratJalan->id);
-
-        // Dapur-facing download is one combined PDF per Order (covering
-        // every PRIMARY/ADDON shipment so far), regenerated on every new SJ.
-        GenerateOrderSuratJalanPdfJob::dispatchSync($suratJalan->order_id);
+        throw new \RuntimeException('Gagal membuat nomor dokumen pengiriman unik setelah beberapa percobaan.');
     }
 }

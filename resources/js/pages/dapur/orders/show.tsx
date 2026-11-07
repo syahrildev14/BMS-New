@@ -10,7 +10,7 @@ import { Input } from '@/shared/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table';
 import { confirmDelete, errorAlert } from '@/shared/lib/alerts';
 import { formatQty, formatRupiah } from '@/shared/lib/format';
-import type { Item, Order, Supplier } from '@/shared/types/prd.type';
+import type { Item, Order } from '@/shared/types/prd.type';
 
 interface SttLine {
   id: number;
@@ -19,22 +19,25 @@ interface SttLine {
   rejection_reason: string;
 }
 
+// Dapur only chooses item + qty — supplier and price are filled in by the
+// server from the item master.
 interface NewItemLine {
   key: number;
   item_id: string;
-  supplier_id: string;
   qty_ordered: string;
-  estimated_price: string;
 }
 
 let nextNewItemKey = 1;
 
 function emptyNewItemLine(): NewItemLine {
-  return { key: nextNewItemKey++, item_id: '', supplier_id: '', qty_ordered: '', estimated_price: '' };
+  return { key: nextNewItemKey++, item_id: '', qty_ordered: '' };
 }
 
-export default function DapurOrdersShow({ order, items, suppliers }: { order: Order; items: Item[]; suppliers: Supplier[] }) {
-  const sttEligible = (order.order_items ?? []).filter((oi) => oi.surat_jalan_id !== null);
+export default function DapurOrdersShow({ order, items }: { order: Order; items: Item[] }) {
+  // Lines on a document the koperasi already verified are locked (enforced
+  // server-side too; this is the matching UI state).
+  const verifiedDocumentIds = new Set((order.surat_jalans ?? []).filter((doc) => doc.verification_status === 'VERIFIED').map((doc) => doc.id));
+  const sttEligible = (order.order_items ?? []).filter((oi) => oi.surat_jalan_id !== null && !verifiedDocumentIds.has(oi.surat_jalan_id));
 
   const [lines, setLines] = useState<SttLine[]>(
     sttEligible.map((oi) => ({
@@ -68,26 +71,15 @@ export default function DapurOrdersShow({ order, items, suppliers }: { order: Or
     setNewLines((prev) => prev.map((line) => (line.key === key ? { ...line, ...patch } : line)));
   };
 
-  const onPickNewItem = (key: number, itemId: string) => {
-    const item = items.find((i) => String(i.id) === itemId);
-    updateNewLine(key, {
-      item_id: itemId,
-      supplier_id: item?.default_supplier_id ? String(item.default_supplier_id) : '',
-      estimated_price: item?.base_selling_price ?? '',
-    });
-  };
-
   const addNewLine = () => setNewLines((prev) => [...prev, emptyNewItemLine()]);
   const removeNewLine = (key: number) => setNewLines((prev) => prev.filter((line) => line.key !== key));
 
   const submitAddItems = () => {
     const payload = newLines
-      .filter((line) => line.item_id && line.supplier_id && line.qty_ordered)
+      .filter((line) => line.item_id && line.qty_ordered)
       .map((line) => ({
         item_id: Number(line.item_id),
-        supplier_id: Number(line.supplier_id),
         qty_ordered: Number(line.qty_ordered),
-        estimated_price: Number(line.estimated_price || 0),
       }));
 
     if (payload.length === 0) return;
@@ -104,16 +96,63 @@ export default function DapurOrdersShow({ order, items, suppliers }: { order: Or
     );
   };
 
+  const [uploadingDocId, setUploadingDocId] = useState<number | null>(null);
+
+  const uploadPhotos = (documentId: number, files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    // Matches the server limit; a larger request is refused by nginx/PHP
+    // before Laravel can answer with a readable message.
+    const totalBytes = Array.from(files).reduce((sum, file) => sum + file.size, 0);
+
+    if (totalBytes > 20 * 1024 * 1024) {
+      errorAlert('Total foto dalam sekali unggah maksimal 20 MB. Unggah sebagian dulu.');
+      return;
+    }
+
+    setUploadingDocId(documentId);
+    router.post(
+      route('dapur.documents.photos.store', documentId),
+      { photos: Array.from(files) },
+      {
+        forceFormData: true,
+        preserveScroll: true,
+        preserveState: true,
+        onFinish: () => setUploadingDocId(null),
+        onError: (errors) => errorAlert(Object.values(errors)[0] ?? 'Gagal mengunggah foto.'),
+      },
+    );
+  };
+
+  const deletePhoto = async (documentId: number, photoId: number) => {
+    const ok = await confirmDelete({ title: 'Hapus foto ini?' });
+    if (!ok) return;
+
+    router.delete(route('dapur.documents.photos.destroy', [documentId, photoId]), {
+      preserveScroll: true,
+      preserveState: true,
+      onError: (errors) => errorAlert(Object.values(errors)[0] ?? 'Gagal menghapus foto.'),
+    });
+  };
+
   const updateLine = (id: number, patch: Partial<SttLine>) => {
     setLines((prev) => prev.map((line) => (line.id === id ? { ...line, ...patch } : line)));
   };
 
   const submitStt = () => {
+    // Only lines typed in: another document on this Order may not have arrived yet.
+    const filled = lines.filter((l) => l.qty_received !== '');
+
+    if (filled.length === 0) {
+      errorAlert('Isi qty diterima untuk barang yang sudah datang.');
+      return;
+    }
+
     setSaving(true);
     router.post(
       route('dapur.orders.stt', order.id),
       {
-        items: lines.map((l) => ({
+        items: filled.map((l) => ({
           id: l.id,
           qty_received: l.qty_received,
           qty_rejected: l.qty_rejected,
@@ -298,12 +337,68 @@ export default function DapurOrdersShow({ order, items, suppliers }: { order: Or
         <div>
           <h2 className="mb-2 text-sm font-semibold text-gray-700">Surat Jalan &amp; Tanda Terima</h2>
           {(order.surat_jalans ?? []).length === 0 ? (
-            <p className="text-sm text-gray-400">Belum ada Surat Jalan diterbitkan untuk order ini.</p>
+            <p className="text-sm text-gray-400">Belum ada dokumen pengiriman untuk order ini.</p>
           ) : (
-            <div className="flex flex-col gap-3 rounded-md border border-gray-200 p-4 dark:border-gray-800">
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                {(order.surat_jalans ?? []).length} pengiriman: {(order.surat_jalans ?? []).map((sj) => sj.sj_number).join(', ')}
-              </p>
+            <div className="flex flex-col divide-y divide-gray-100 rounded-md border border-gray-200 dark:border-gray-800">
+              {(order.surat_jalans ?? []).map((doc) => (
+                <div key={doc.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm">
+                  <div className="flex flex-col gap-1">
+                    <span className="font-medium">{doc.sj_number}</span>
+                    <span className="text-xs text-gray-500">
+                      {doc.document_type === 'TANDA_TERIMA' ? 'Tanda Terima bahan basah' : 'Surat Jalan bahan kering'}
+                      {doc.supplier ? ` — ${doc.supplier.name}` : ''}
+                      {doc.shipment_date ? ` — kirim ${doc.shipment_date}` : ''}
+                    </span>
+                    {doc.verification_status === 'VERIFIED' && <span className="text-xs font-medium text-green-700">Terverifikasi koperasi</span>}
+                    {doc.verification_status === 'DISCREPANCY' && (
+                      <span className="text-xs font-medium text-amber-700">Ada selisih: {doc.verification_notes}</span>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      {(doc.photos ?? []).map((photo) => (
+                        <span key={photo.id} className="flex items-center gap-1">
+                          <a href={route('dapur.documents.photos.show', [doc.id, photo.id])} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                            {photo.original_name}
+                          </a>
+                          {doc.verification_status !== 'VERIFIED' && (
+                            <button type="button" aria-label={`Hapus foto ${photo.original_name}`} onClick={() => deletePhoto(doc.id, photo.id)}>
+                              <Trash2 className="h-3 w-3 text-red-500" />
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                      {doc.verification_status !== 'VERIFIED' && (
+                        <label className="cursor-pointer font-medium text-blue-600 hover:underline">
+                          {uploadingDocId === doc.id ? 'Mengunggah...' : '+ Unggah Foto'}
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/jpeg,image/png,image/webp"
+                            className="hidden"
+                            disabled={uploadingDocId !== null}
+                            onChange={(e) => {
+                              uploadPhotos(doc.id, e.target.files);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <a href={route('dapur.documents.download', doc.id)} className="text-xs font-medium text-blue-600 hover:underline">
+                      Unduh Dokumen
+                    </a>
+                    {doc.tanda_terima_pdf_url && (
+                      <a
+                        href={route('dapur.documents.tanda-terima.download', doc.id)}
+                        className="text-xs font-medium text-emerald-600 hover:underline"
+                      >
+                        Tanda Terima (hasil STT)
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -325,29 +420,18 @@ export default function DapurOrdersShow({ order, items, suppliers }: { order: Or
 
               return (
                 <div key={line.key} className="grid grid-cols-12 items-end gap-2 border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
-                  <div className="col-span-4 flex flex-col gap-1">
+                  <div className="col-span-7 flex flex-col gap-1">
                     <label className="text-xs font-medium text-gray-700">Item</label>
                     <Combobox
                       value={line.item_id}
-                      onValueChange={(v) => onPickNewItem(line.key, v)}
+                      onValueChange={(v) => updateNewLine(line.key, { item_id: v })}
                       placeholder="Ketik untuk cari item..."
                       emptyText="Item tidak ditemukan."
                       options={items.map((item) => ({ value: String(item.id), label: `${item.name} (${item.satuan?.name})` }))}
                     />
                   </div>
 
-                  <div className="col-span-3 flex flex-col gap-1">
-                    <label className="text-xs font-medium text-gray-700">Supplier</label>
-                    <Combobox
-                      value={line.supplier_id}
-                      onValueChange={(v) => updateNewLine(line.key, { supplier_id: v })}
-                      placeholder="Pilih supplier..."
-                      emptyText="Supplier tidak ditemukan."
-                      options={suppliers.map((supplier) => ({ value: String(supplier.id), label: supplier.name }))}
-                    />
-                  </div>
-
-                  <div className="col-span-2 flex flex-col gap-1">
+                  <div className="col-span-4 flex flex-col gap-1">
                     <label className="text-xs font-medium text-gray-700">Qty {selectedItem ? `(${selectedItem.satuan?.name})` : ''}</label>
                     <Input
                       type="number"
@@ -355,17 +439,6 @@ export default function DapurOrdersShow({ order, items, suppliers }: { order: Or
                       step="0.01"
                       value={line.qty_ordered}
                       onChange={(e) => updateNewLine(line.key, { qty_ordered: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="col-span-2 flex flex-col gap-1">
-                    <label className="text-xs font-medium text-gray-700">Estimasi Harga</label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={line.estimated_price}
-                      onChange={(e) => updateNewLine(line.key, { estimated_price: e.target.value })}
                     />
                   </div>
 

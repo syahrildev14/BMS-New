@@ -23,7 +23,7 @@ class GenerateTandaTerimaPdfJob implements ShouldQueue
 
     public function handle(): void
     {
-        $suratJalan = SuratJalan::with(['order.dapur', 'orderItems.item.satuan'])
+        $suratJalan = SuratJalan::with(['dapur', 'supplier', 'order.dapur', 'orderItems.item.satuan', 'orderItems.order'])
             ->findOrFail($this->suratJalanId);
 
         $pdf = Pdf::loadView('pdf.tanda-terima', ['suratJalan' => $suratJalan]);

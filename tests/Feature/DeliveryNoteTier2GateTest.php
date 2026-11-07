@@ -45,14 +45,14 @@ it('does not let a Tier 2 pending-approval item slip into a generated Surat Jala
 
     // Ops generates the Surat Jalan before ever opening the approval page.
     $service = app(DeliveryNoteService::class);
-    $result = $service->generateSuratJalan($order->id, $opsUser->id);
+    $result = $service->generateDocuments($dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $opsUser->id);
 
-    expect($result['surat_jalan'])->not->toBeNull();
+    expect($result['documents'])->toHaveCount(1);
 
     $pendingItem->refresh();
     $confirmedItem->refresh();
 
-    expect($confirmedItem->surat_jalan_id)->toBe($result['surat_jalan']->id);
+    expect($confirmedItem->surat_jalan_id)->toBe($result['documents']->first()->id);
     expect($pendingItem->surat_jalan_id)->toBeNull();
 });
 

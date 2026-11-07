@@ -80,14 +80,32 @@ export interface Order {
   surat_jalans?: SuratJalan[];
 }
 
+export type DeliveryDocumentType = 'SURAT_JALAN' | 'TANDA_TERIMA';
+
+export type DeliveryVerificationStatus = 'PENDING' | 'VERIFIED' | 'DISCREPANCY';
+
+export interface DeliveryDocumentPhoto {
+  id: number;
+  original_name: string;
+}
+
 export interface SuratJalan {
   id: number;
   sj_number: string;
-  order_id: number;
+  document_type: DeliveryDocumentType;
+  order_id: number | null;
+  dapur_id: number | null;
+  supplier_id: number | null;
+  shipment_date: string | null;
+  dapur?: Dapur;
+  supplier?: Supplier;
   type: 'PRIMARY' | 'ADDON';
   sequence_number: number;
   pdf_url: string | null;
   tanda_terima_pdf_url: string | null;
+  verification_status: DeliveryVerificationStatus;
+  verification_notes: string | null;
+  photos?: DeliveryDocumentPhoto[];
   printed_by: number;
   order?: Order;
 }

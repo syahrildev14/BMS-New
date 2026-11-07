@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Jobs\GenerateInvoicePdfJob;
 use App\Models\Invoice;
 use App\Models\Order;
+use App\Models\SuratJalan;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -40,6 +41,8 @@ class SplitInvoiceService
                 "Tidak bisa generate invoice: {$pendingSttCount} item yang sudah dikirim (Surat Jalan) belum diinput STT (qty_received) oleh Dapur."
             );
 
+            $this->assertDocumentsVerified($order);
+
             $orderItems = $order->orderItems()->whereNotNull('qty_received')->with(['supplier', 'item'])->get();
 
             // WET_GOODS only gets final_selling_price from
@@ -59,7 +62,7 @@ class SplitInvoiceService
                 // list of item names, instead of a raw exception leaking to
                 // the browser as a bare Laravel error page.
                 throw ValidationException::withMessages([
-                    'order_id' => "Tidak bisa generate invoice: {$unpriced->count()} item belum punya final_selling_price. Purchasing belum input Harga Harian untuk tanggal pengiriman Order ini ({$dateStr}).",
+                    'order_id' => "Tidak bisa generate invoice: {$unpriced->count()} item belum punya final_selling_price. Purchasing belum input Nota atau Harga Harian untuk tanggal pengiriman Order ini ({$dateStr}).",
                     'unpriced_date' => $dateStr,
                     'unpriced_items' => $unpriced->pluck('item.name')->implode(', '),
                 ]);
@@ -77,7 +80,7 @@ class SplitInvoiceService
                     return ((float) $item->qty_received - (float) $item->qty_rejected) * $item->final_selling_price;
                 });
 
-                if ($existing && $existing->status === 'ISSUED') {
+                if ($existing && in_array($existing->status, BillingGuard::FINAL_STATUSES, true)) {
                     // A later add-on Surat Jalan (PRD §Module 3) for this
                     // same Order+Supplier can get STT-ed after this invoice
                     // was already approved — silently `continue`-ing here
@@ -87,9 +90,9 @@ class SplitInvoiceService
                     abort_if(
                         round($totalAmount, 2) !== round((float) $existing->total_amount, 2),
                         422,
-                        "Invoice {$existing->invoice_number} sudah ISSUED, tapi ada perubahan kuantitas tertagih (kemungkinan Surat Jalan susulan yang baru di-STT) untuk supplier ini — total baru ".
+                        "Invoice {$existing->invoice_number} sudah {$existing->status}, tapi ada perubahan kuantitas tertagih (kemungkinan Surat Jalan susulan yang baru di-STT) untuk supplier ini — total baru ".
                             number_format($totalAmount, 2).' vs invoice yang sudah terbit '.number_format((float) $existing->total_amount, 2).
-                            '. Invoice yang sudah ISSUED tidak ditimpa otomatis — butuh invoice/penyesuaian susulan secara manual.'
+                            '. Invoice yang sudah terbit tidak ditimpa otomatis — butuh invoice/penyesuaian susulan secara manual.'
                     );
 
                     $invoices->push($existing);
@@ -139,20 +142,35 @@ class SplitInvoiceService
     }
 
     /**
+     * Crosscheck H+1: every per-supplier document under this Order must be
+     * VERIFIED. Takes the document row lock DeliveryVerificationService uses,
+     * so billing and a reopen can't interleave. Legacy documents (no
+     * supplier_id) predate the crosscheck and are exempt.
+     */
+    private function assertDocumentsVerified(Order $order): void
+    {
+        $unverified = SuratJalan::whereIn('id', $order->orderItems()->whereNotNull('surat_jalan_id')->select('surat_jalan_id'))
+            ->whereNotNull('supplier_id')
+            ->lockForUpdate()
+            ->get()
+            ->where('verification_status', '!=', SuratJalan::VERIFICATION_VERIFIED)
+            ->pluck('sj_number');
+
+        if ($unverified->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'order_id' => 'Dokumen belum lolos Crosscheck H+1: '.$unverified->implode(', ').'.',
+            ]);
+        }
+    }
+
+    /**
      * Checker signs off a Maker's draft: becomes ISSUED and only now gets its
      * official PDF. Once every invoice under the Order is ISSUED, the Order
      * itself is COMPLETED.
      */
     public function approveInvoice(Invoice $invoice): Invoice
     {
-        abort_unless($invoice->status === 'DRAFT', 422, 'Hanya invoice berstatus DRAFT yang bisa disetujui.');
-
         DB::transaction(function () use ($invoice) {
-            $invoice->update([
-                'status' => 'ISSUED',
-                'due_date' => now()->addDays((int) config('finance.invoice_due_days'))->toDateString(),
-            ]);
-
             // Locked so two invoices under the same Order being approved at
             // nearly the same time can't both read "the other one isn't
             // ISSUED yet" and leave the Order stuck un-COMPLETED forever —
@@ -160,7 +178,25 @@ class SplitInvoiceService
             // its update.
             $order = Order::where('id', $invoice->order_id)->lockForUpdate()->first();
 
-            if ($order->invoices()->where('status', '!=', 'ISSUED')->doesntExist()) {
+            // Re-read under lock: reopening a document voids DRAFT invoices,
+            // so a stale page must not approve one, and a document reopened
+            // since this draft was generated must block approval.
+            $fresh = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            abort_unless($fresh->status === 'DRAFT', 422, 'Hanya invoice berstatus DRAFT yang bisa disetujui.');
+            $this->assertDocumentsVerified($order);
+
+            $invoice->update([
+                'status' => 'ISSUED',
+                'due_date' => now()->addDays((int) config('finance.invoice_due_days'))->toDateString(),
+            ]);
+
+            // Lines not yet shipped (e.g. dry goods held for stock) still
+            // need delivering and billing, so the Order must stay open:
+            // COMPLETED Orders are excluded from shipping and Daftar Belanja.
+            $allBilled = $order->invoices()->whereNotIn('status', BillingGuard::FINAL_STATUSES)->doesntExist();
+            $allShipped = $order->orderItems()->whereNull('surat_jalan_id')->doesntExist();
+
+            if ($allBilled && $allShipped) {
                 $order->update(['status' => 'COMPLETED']);
             }
         });

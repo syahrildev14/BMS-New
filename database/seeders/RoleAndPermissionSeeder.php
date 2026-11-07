@@ -19,6 +19,7 @@ class RoleAndPermissionSeeder extends Seeder
         $permissions = [
             'orders.manage',
             'delivery-notes.manage',
+            'delivery-verifications.manage',
             'revisions.approve',
             'invoices.manage',
             'invoices.approve',
@@ -32,6 +33,7 @@ class RoleAndPermissionSeeder extends Seeder
             'dapurs.manage',
             'satuans.manage',
             'purchase-orders.manage',
+            'purchase-notes.manage',
             'stock.manage',
             'system.backup.manage',
             'system.audit-log.view',
@@ -43,8 +45,8 @@ class RoleAndPermissionSeeder extends Seeder
 
         $rolePermissions = [
             'dapur' => ['orders.manage'],
-            'ops' => ['delivery-notes.manage', 'revisions.approve'],
-            'purchasing' => ['pricing.manage', 'items.manage', 'suppliers.manage', 'satuans.manage', 'purchase-orders.manage'],
+            'ops' => ['delivery-notes.manage', 'delivery-verifications.manage', 'revisions.approve'],
+            'purchasing' => ['pricing.manage', 'items.manage', 'suppliers.manage', 'satuans.manage', 'purchase-orders.manage', 'purchase-notes.manage'],
             'finance' => ['invoices.manage', 'supplier-bills.manage'],
             'gudang' => ['stock.manage'],
             'admin' => $permissions,
