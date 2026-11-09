@@ -173,7 +173,7 @@ export default function FinanceInvoicesIndex({
                 <TableCell className="text-right">
                   <Link
                     href={route('finance.invoices.by-date', group.date)}
-                    className="text-sm font-medium text-blue-600 hover:underline"
+                    className="text-sm font-medium text-primary-text hover:underline"
                   >
                     Lihat Detail
                   </Link>

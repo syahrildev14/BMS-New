@@ -18,7 +18,7 @@ export function StatTile({ label, value, tone = 'default', hint }: StatTileProps
     // min-w-0 is load-bearing: without it, a grid/flex child never shrinks
     // below its text's intrinsic width, so `truncate` below does nothing and
     // long labels/hints overflow the tile instead of clipping with an ellipsis.
-    <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-white/30 bg-white/10 p-4 shadow-[0_8px_32px_rgba(37,99,235,0.15)] backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+    <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-white/30 bg-white/10 p-4 shadow-[0_8px_32px_var(--primary-glow)] backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
       <span className="truncate text-xs font-medium text-gray-500 dark:text-gray-400" title={label}>
         {label}
       </span>

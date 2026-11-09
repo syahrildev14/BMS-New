@@ -356,7 +356,7 @@ export default function DapurOrdersShow({ order, items }: { order: Order; items:
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       {(doc.photos ?? []).map((photo) => (
                         <span key={photo.id} className="flex items-center gap-1">
-                          <a href={route('dapur.documents.photos.show', [doc.id, photo.id])} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                          <a href={route('dapur.documents.photos.show', [doc.id, photo.id])} target="_blank" rel="noreferrer" className="text-primary-text hover:underline">
                             {photo.original_name}
                           </a>
                           {doc.verification_status !== 'VERIFIED' && (
@@ -367,7 +367,7 @@ export default function DapurOrdersShow({ order, items }: { order: Order; items:
                         </span>
                       ))}
                       {doc.verification_status !== 'VERIFIED' && (
-                        <label className="cursor-pointer font-medium text-blue-600 hover:underline">
+                        <label className="cursor-pointer font-medium text-primary-text hover:underline">
                           {uploadingDocId === doc.id ? 'Mengunggah...' : '+ Unggah Foto'}
                           <input
                             type="file"
@@ -385,7 +385,7 @@ export default function DapurOrdersShow({ order, items }: { order: Order; items:
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <a href={route('dapur.documents.download', doc.id)} className="text-xs font-medium text-blue-600 hover:underline">
+                    <a href={route('dapur.documents.download', doc.id)} className="text-xs font-medium text-primary-text hover:underline">
                       Unduh Dokumen
                     </a>
                     {doc.tanda_terima_pdf_url && (
@@ -403,7 +403,7 @@ export default function DapurOrdersShow({ order, items }: { order: Order; items:
           )}
         </div>
 
-        <Link href={route('dapur.orders.index')} className="text-sm text-blue-600 hover:underline">
+        <Link href={route('dapur.orders.index')} className="text-sm text-primary-text hover:underline">
           &larr; Kembali ke daftar order
         </Link>
       </div>

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AppearanceController;
 use App\Http\Controllers\Admin\ArmadaController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BackupController;
@@ -184,6 +185,12 @@ Route::middleware(['auth'])->group(function () {
         Route::resource('bank-accounts', BankAccountController::class)
             ->only(['index', 'store', 'update', 'destroy'])
             ->middleware('permission:bank-accounts.manage');
+
+        Route::middleware('permission:appearance.manage')->group(function () {
+            Route::get('appearance', [AppearanceController::class, 'index'])->name('appearance.index');
+            Route::put('appearance', [AppearanceController::class, 'update'])->name('appearance.update');
+            Route::delete('appearance', [AppearanceController::class, 'destroy'])->name('appearance.destroy');
+        });
 
         Route::post('backups/export', [BackupController::class, 'export'])
             ->middleware('permission:system.backup.manage')

@@ -301,7 +301,7 @@ export default function OpsDeliveryNotesIndex({
                 <TableCell>{doc.order_items_count}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-3">
-                    <a href={route('ops.delivery-notes.download', doc.id)} className="text-xs font-medium text-blue-600 hover:underline">
+                    <a href={route('ops.delivery-notes.download', doc.id)} className="text-xs font-medium text-primary-text hover:underline">
                       Dokumen
                     </a>
                     {doc.tanda_terima_pdf_url && (

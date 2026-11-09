@@ -46,10 +46,10 @@ export default function VerificationsIndex({ tab, today, documents }: { tab: 'op
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <TableSearchInput value={search} onChange={setSearch} placeholder="Cari nomor, dapur, supplier..." />
         <div className="flex gap-3 text-sm">
-          <Link href={route('ops.verifications.index', { tab: 'open' })} className={tab === 'open' ? 'font-semibold' : 'text-blue-600 hover:underline'}>
+          <Link href={route('ops.verifications.index', { tab: 'open' })} className={tab === 'open' ? 'font-semibold' : 'text-primary-text hover:underline'}>
             Belum terverifikasi
           </Link>
-          <Link href={route('ops.verifications.index', { tab: 'verified' })} className={tab === 'verified' ? 'font-semibold' : 'text-blue-600 hover:underline'}>
+          <Link href={route('ops.verifications.index', { tab: 'verified' })} className={tab === 'verified' ? 'font-semibold' : 'text-primary-text hover:underline'}>
             Terverifikasi
           </Link>
         </div>
@@ -95,7 +95,7 @@ export default function VerificationsIndex({ tab, today, documents }: { tab: 'op
                   {doc.verification_status === 'PENDING' && <Badge>Menunggu</Badge>}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Link href={route('ops.verifications.show', doc.id)} className="text-sm font-medium text-blue-600 hover:underline">
+                  <Link href={route('ops.verifications.show', doc.id)} className="text-sm font-medium text-primary-text hover:underline">
                     Periksa
                   </Link>
                 </TableCell>

@@ -3,7 +3,7 @@ import { cn } from '@/shared/lib/utils';
 
 const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
   ({ className, ...props }, ref) => (
-    <div className="w-full overflow-auto rounded-xl border border-white/30 bg-white/10 shadow-[0_8px_32px_rgba(37,99,235,0.25)] backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+    <div className="w-full overflow-auto rounded-xl border border-white/30 bg-white/10 shadow-[0_8px_32px_var(--primary-glow)] backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
       <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
     </div>
   ),
@@ -19,7 +19,7 @@ TableHeader.displayName = 'TableHeader';
 
 const TableBody = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
   ({ className, ...props }, ref) => (
-    <tbody ref={ref} className={cn('[&_tr:last-child]:border-0 [&_tr]:hover:bg-blue-500/10 dark:[&_tr]:hover:bg-blue-400/10', className)} {...props} />
+    <tbody ref={ref} className={cn('[&_tr:last-child]:border-0 [&_tr]:hover:bg-primary/10', className)} {...props} />
   ),
 );
 TableBody.displayName = 'TableBody';

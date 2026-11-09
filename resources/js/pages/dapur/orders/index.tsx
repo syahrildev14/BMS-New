@@ -77,7 +77,7 @@ export default function DapurOrdersIndex({ orders }: { orders: Order[] }) {
                   <Badge variant={STATUS_VARIANT[order.status]}>{order.status}</Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Link href={route('dapur.orders.show', order.id)} className="text-sm text-blue-600 hover:underline">
+                  <Link href={route('dapur.orders.show', order.id)} className="text-sm text-primary-text hover:underline">
                     Lihat Detail
                   </Link>
                 </TableCell>

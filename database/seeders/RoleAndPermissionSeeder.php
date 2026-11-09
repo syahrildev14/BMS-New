@@ -40,6 +40,7 @@ class RoleAndPermissionSeeder extends Seeder
             'document-templates.manage',
             'fleet.manage',
             'bank-accounts.manage',
+            'appearance.manage',
         ];
 
         foreach ($permissions as $permission) {

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
 import { ChevronDown, DatabaseBackup, Loader2, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Settings, Sun } from 'lucide-react'; //icons
+import AppLogoIcon from '@/components/app-logo-icon';
 import { useAppearance } from '@/hooks/use-appearance';
 import { menuConfig } from '@/shared/constants/menu.config';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/shared/components/ui/collapsible';
@@ -15,6 +16,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/shared/components/ui/tooltip';
 import { UserAvatar } from '@/shared/components/ui/avatar';
 import { useMediaQuery } from '@/shared/hooks/use-media-query';
+import { applyThemeColor } from '@/shared/lib/color';
 import { cn } from '@/shared/lib/utils';
 import { successAlert, errorAlert, confirmLogout, confirmBackup } from '@/shared/lib/alerts';
 import type { AppUser } from '@/shared/types/prd.type';
@@ -35,6 +37,7 @@ interface AppLayoutProps {
 interface FlashProps {
   flash?: { success?: string | null; error?: string | null };
   auth?: { user?: AppUser | null; permissions?: string[] };
+  appearance?: { color: string; foreground: string };
   [key: string]: unknown;
 }
 
@@ -64,6 +67,13 @@ export function AppLayout({ children }: AppLayoutProps) {
     if (props.flash?.success) successAlert(props.flash.success);
     if (props.flash?.error) errorAlert(props.flash.error);
   }, [props.flash]);
+
+  // Inertia visits don't reload <head>; this also drops an unsaved preview when leaving Admin > Tampilan.
+  const themeColor = props.appearance?.color;
+  const themeForeground = props.appearance?.foreground;
+  useEffect(() => {
+    if (themeColor && themeForeground) applyThemeColor(themeColor, themeForeground);
+  }, [url, themeColor, themeForeground]);
 
   const permissions = props.auth?.permissions ?? [];
   const can = (permission?: string) => !permission || permissions.includes(permission);
@@ -138,9 +148,9 @@ export function AppLayout({ children }: AppLayoutProps) {
                 type="button"
                 onClick={toggleCollapsed}
                 title={collapsed ? 'Perluas sidebar' : 'Perkecil sidebar'}
-                className="group flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+                className="group flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
               >
-                <span className="group-hover:hidden">B</span>
+                <AppLogoIcon className="h-8 w-8 object-contain group-hover:hidden" />
                 {collapsed ? (
                   <PanelLeftOpen className="hidden h-4 w-4 group-hover:block" />
                 ) : (
@@ -148,9 +158,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 )}
               </button>
             ) : (
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground shadow-sm">
-                B
-              </div>
+              <AppLogoIcon className="h-8 w-8 shrink-0 object-contain" />
             )}
             <span className={cn('font-semibold text-gray-900 dark:text-gray-100', collapsed && 'lg:hidden')}>Sistem BMS</span>
           </div>
@@ -167,7 +175,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                     className={cn(
                       'flex items-center gap-3 rounded-md border-l-2 border-transparent px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100',
                       active &&
-                        'border-primary bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary dark:bg-primary/20 dark:hover:bg-primary/20',
+                        'border-primary bg-primary/10 text-primary-text hover:bg-primary/10 hover:text-primary-text dark:bg-primary/20 dark:hover:bg-primary/20',
                       collapsed && 'lg:justify-center lg:border-l-0 lg:px-0',
                     )}
                   >
@@ -201,7 +209,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                             type="button"
                             className={cn(
                               'flex w-full items-center justify-center rounded-md px-3 py-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 lg:justify-center lg:px-0 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100',
-                              groupActive && 'bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary dark:bg-primary/20 dark:hover:bg-primary/20',
+                              groupActive && 'bg-primary/10 text-primary-text hover:bg-primary/10 hover:text-primary-text dark:bg-primary/20 dark:hover:bg-primary/20',
                             )}
                           >
                             <Icon className="h-4 w-4 shrink-0" />
@@ -252,7 +260,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                           className={cn(
                             'rounded-md px-2 py-1.5 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100',
                             url.startsWith(child.href) &&
-                              'bg-primary/10 font-medium text-primary hover:bg-primary/10 hover:text-primary dark:bg-primary/20 dark:hover:bg-primary/20',
+                              'bg-primary/10 font-medium text-primary-text hover:bg-primary/10 hover:text-primary-text dark:bg-primary/20 dark:hover:bg-primary/20',
                           )}
                         >
                           {child.label}
@@ -383,7 +391,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <main className="relative flex-1 p-4 sm:p-6">
             {/* Electric blue ambient light — sits behind the page content, not tied to any one component. */}
             <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(37,99,235,0.7),_rgba(37,99,235,0.3)_45%,_transparent_75%)] blur-3xl" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_color-mix(in_srgb,var(--primary)_70%,transparent),_color-mix(in_srgb,var(--primary)_30%,transparent)_45%,_transparent_75%)] blur-3xl" />
             </div>
             {children}
           </main>

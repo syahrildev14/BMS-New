@@ -80,6 +80,7 @@ Struktur tabel utama untuk diimplementasikan via Laravel Migrations:
 - **Dynamic Permission Assignment:** Admin dapat mengontrol akses fitur untuk Dapur, Ops, Purchasing, Finance, Gudang, dan Admin via UI Dashboard.
 - **Data Scoping Guard:**
   - Akun berpenerbit `dapur_id` otomatis dibatasi (*data scope*) hanya bisa mengakses portal dan data dapur miliknya sendiri — berlaku di daftar maupun detail Order.
+- **Warna Tema (`appearance.manage`, Admin → Tampilan):** Admin menentukan satu warna utama untuk seluruh pengguna dan halaman login, tersimpan di `app_settings` (key `primary_color`). Warna harus berkontras minimal 3:1 terhadap latar putih dan gelap. Warna status dan PDF tidak ikut berubah.
 
 ### MODULE 1: DAPUR PORTAL & FLEXIBLE REVISION GATE
 - **Direct Order Entry:** Pengguna dari pihak Dapur SPPG login ke portal khusus dan menginput daftar pre-order bahan baku secara mandiri menggunakan katalog item yang aktif.

@@ -20,7 +20,7 @@ export function SettingsTabs() {
             href={tab.href}
             className={cn(
               'border-b-2 px-4 py-2.5 text-sm font-medium transition-colors',
-              active ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-900',
+              active ? 'border-primary text-primary-text' : 'border-transparent text-gray-500 hover:text-gray-900',
             )}
           >
             {tab.label}

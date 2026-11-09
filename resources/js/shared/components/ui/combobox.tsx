@@ -115,12 +115,12 @@ export function Combobox({ value, onValueChange, options, placeholder = 'Cari...
                 className={cn(
                   'flex cursor-pointer items-center justify-between px-3 py-2 text-sm',
                   index === highlightedIndex
-                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                    ? 'bg-primary-soft text-primary-text'
                     : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800',
                 )}
               >
                 <span>{option.label}</span>
-                {option.value === value && <Check className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                {option.value === value && <Check className="h-4 w-4 text-primary-text" />}
               </div>
             ))
           )}

@@ -47,7 +47,7 @@ export function PageLoadingOverlay() {
       aria-live="polite"
     >
       <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-5 py-3 shadow-lg dark:border-gray-800 dark:bg-gray-900">
-        <span className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600 dark:border-gray-700 dark:border-t-blue-400" />
+        <span className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-primary dark:border-gray-700" />
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Memuat...</span>
       </div>
     </div>

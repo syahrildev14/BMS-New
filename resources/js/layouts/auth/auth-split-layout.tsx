@@ -25,7 +25,7 @@ export default function AuthSplitLayout({ children, title, description }: AuthLa
                     className="absolute inset-0 opacity-40"
                     style={{
                         backgroundImage:
-                            'radial-gradient(circle at 15% 15%, rgba(37,99,235,0.35), transparent 45%), radial-gradient(circle at 85% 85%, rgba(29,78,216,0.3), transparent 50%)',
+                            'radial-gradient(circle at 15% 15%, color-mix(in srgb, var(--primary) 35%, transparent), transparent 45%), radial-gradient(circle at 85% 85%, color-mix(in srgb, var(--primary) 30%, transparent), transparent 50%)',
                     }}
                 />
                 <div

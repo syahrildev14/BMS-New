@@ -28,6 +28,10 @@
 
     --color-primary: var(--primary);
     --color-primary-foreground: var(--primary-foreground);
+    --color-primary-hover: var(--primary-hover);
+    --color-primary-active: var(--primary-active);
+    --color-primary-soft: var(--primary-soft);
+    --color-primary-text: var(--primary-text);
 
     --color-secondary: var(--secondary);
     --color-secondary-foreground: var(--secondary-foreground);
@@ -86,8 +90,14 @@
     --card-foreground: hsl(0, 0%, 3.9%);
     --popover: hsl(0, 0%, 100%);
     --popover-foreground: hsl(0, 0%, 3.9%);
-    --primary: hsl(221, 83%, 53%);
-    --primary-foreground: hsl(0, 0%, 98%);
+    /* --brand and --brand-foreground come from app.blade.php (Admin > Tampilan). */
+    --primary: var(--brand, #2563eb);
+    --primary-foreground: var(--brand-foreground, #ffffff);
+    --primary-hover: color-mix(in srgb, var(--primary) 88%, black);
+    --primary-active: color-mix(in srgb, var(--primary) 76%, black);
+    --primary-soft: color-mix(in srgb, var(--primary) 10%, white);
+    --primary-text: color-mix(in srgb, var(--primary) 85%, black);
+    --primary-glow: color-mix(in srgb, var(--primary) 20%, transparent);
     --secondary: hsl(0, 0%, 96.1%);
     --secondary-foreground: hsl(0, 0%, 9%);
     --muted: hsl(0, 0%, 96.1%);
@@ -127,8 +137,8 @@
     --card-foreground: hsl(0, 0%, 98%);
     --popover: hsl(0, 0%, 3.9%);
     --popover-foreground: hsl(0, 0%, 98%);
-    --primary: hsl(217, 91%, 60%);
-    --primary-foreground: hsl(0, 0%, 9%);
+    --primary-soft: color-mix(in srgb, var(--primary) 25%, #030712);
+    --primary-text: color-mix(in srgb, var(--primary) 65%, white);
     --secondary: hsl(30, 10%, 92%);
     --secondary-foreground: hsl(0, 0%, 98%);
     --muted: hsl(0, 11%, 22%);

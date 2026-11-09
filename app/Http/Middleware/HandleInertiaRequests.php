@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\AppearanceService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -46,6 +47,7 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user()?->load('roles'),
                 'permissions' => $request->user()?->getAllPermissions()->pluck('name') ?? [],
             ],
+            'appearance' => app(AppearanceService::class)->theme(),
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),

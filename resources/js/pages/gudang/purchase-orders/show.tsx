@@ -112,7 +112,7 @@ export default function GudangPurchaseOrdersShow({ date, purchaseOrders }: { dat
         </TableBody>
       </Table>
 
-      <Link href={route('gudang.purchase-orders.index')} className="mt-4 inline-block text-sm text-blue-600 hover:underline">
+      <Link href={route('gudang.purchase-orders.index')} className="mt-4 inline-block text-sm text-primary-text hover:underline">
         &larr; Kembali ke daftar tanggal
       </Link>
 

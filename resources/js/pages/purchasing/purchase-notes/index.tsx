@@ -122,7 +122,7 @@ export default function PurchaseNotesIndex({ notes, pendingTandaTerima }: { note
                     (note.has_discrepancy ? <Badge variant="warning">Ada Selisih</Badge> : <Badge variant="success">Sesuai</Badge>)}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Link href={route('purchasing.purchase-notes.edit', note.id)} className="text-sm font-medium text-blue-600 hover:underline">
+                  <Link href={route('purchasing.purchase-notes.edit', note.id)} className="text-sm font-medium text-primary-text hover:underline">
                     Lihat / Koreksi
                   </Link>
                 </TableCell>

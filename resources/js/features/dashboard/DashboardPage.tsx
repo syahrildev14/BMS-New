@@ -147,7 +147,7 @@ export function DashboardPage({ widgets }: DashboardPageProps) {
                 return (
                   <div
                     key={section.title}
-                    className="flex flex-col gap-4 rounded-xl border border-white/30 bg-white/10 p-5 shadow-[0_8px_32px_rgba(37,99,235,0.15)] backdrop-blur-xl dark:border-white/10 dark:bg-white/5"
+                    className="flex flex-col gap-4 rounded-xl border border-white/30 bg-white/10 p-5 shadow-[0_8px_32px_var(--primary-glow)] backdrop-blur-xl dark:border-white/10 dark:bg-white/5"
                   >
                     <div className="flex items-center gap-2">
                       <Icon className="h-4 w-4 text-gray-500 dark:text-gray-400" />
@@ -168,7 +168,7 @@ export function DashboardPage({ widgets }: DashboardPageProps) {
                         section happens to have. */}
                     <Link
                       href={section.href}
-                      className="mt-auto text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+                      className="mt-auto text-sm font-medium text-primary-text hover:underline"
                     >
                       {section.linkLabel} &rarr;
                     </Link>

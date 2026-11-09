@@ -124,7 +124,7 @@ export default function PurchasingPurchaseOrdersShow({ date, purchaseOrders }: {
         </TableBody>
       </Table>
 
-      <Link href={route('purchasing.purchase-orders.index')} className="mt-4 inline-block text-sm text-blue-600 hover:underline">
+      <Link href={route('purchasing.purchase-orders.index')} className="mt-4 inline-block text-sm text-primary-text hover:underline">
         &larr; Kembali ke daftar tanggal
       </Link>
 

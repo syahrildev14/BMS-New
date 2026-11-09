@@ -117,7 +117,7 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
             {mustVerifyEmail && auth.user.email_verified_at === null && (
               <div className="mt-1 text-sm text-gray-500">
                 Email Anda belum terverifikasi.{' '}
-                <Link href={route('verification.send')} method="post" as="button" className="text-blue-600 underline hover:text-blue-700">
+                <Link href={route('verification.send')} method="post" as="button" className="text-primary-text underline">
                   Kirim ulang email verifikasi.
                 </Link>
                 {status === 'verification-link-sent' && <p className="mt-1 text-green-600">Link verifikasi baru telah dikirim.</p>}

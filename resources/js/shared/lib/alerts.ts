@@ -1,7 +1,7 @@
 import Swal from 'sweetalert2';
 
 /**
- * Theming disamakan dengan brand ERP: minimalis, aksen biru, tanpa warna mencolok.
+ * Theming disamakan dengan brand ERP: minimalis, aksen warna tema, tanpa warna mencolok.
  * Dipakai di SELURUH modul lewat helper ini — jangan panggil Swal.fire() langsung di component.
  */
 const baseConfig = {
@@ -9,7 +9,7 @@ const baseConfig = {
   customClass: {
     popup: 'rounded-xl shadow-lg',
     confirmButton:
-      'inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 mx-1',
+      'inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover mx-1',
     cancelButton:
       'inline-flex items-center justify-center rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 mx-1',
   },

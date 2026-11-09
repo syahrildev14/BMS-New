@@ -58,7 +58,7 @@ export default function GudangPurchaseOrdersIndex({ groups }: { groups: Purchase
                 <TableCell className="text-right">
                   <Link
                     href={route('gudang.purchase-orders.by-date', group.date)}
-                    className="text-sm font-medium text-blue-600 hover:underline"
+                    className="text-sm font-medium text-primary-text hover:underline"
                   >
                     Lihat Detail
                   </Link>

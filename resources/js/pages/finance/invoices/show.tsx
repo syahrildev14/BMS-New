@@ -126,7 +126,7 @@ export default function FinanceInvoicesShow({ date, invoices }: { date: string; 
                   {invoice.pdf_url ? (
                     <a
                       href={route('finance.invoices.download', invoice.id)}
-                      className="text-sm font-medium text-blue-600 hover:underline"
+                      className="text-sm font-medium text-primary-text hover:underline"
                     >
                       Cetak PDF
                     </a>
@@ -166,7 +166,7 @@ export default function FinanceInvoicesShow({ date, invoices }: { date: string; 
         </TableBody>
       </Table>
 
-      <Link href={route('finance.invoices.index')} className="mt-4 inline-block text-sm text-blue-600 hover:underline">
+      <Link href={route('finance.invoices.index')} className="mt-4 inline-block text-sm text-primary-text hover:underline">
         &larr; Kembali ke daftar tanggal
       </Link>
 
