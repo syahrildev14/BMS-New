@@ -19,7 +19,10 @@ use Throwable;
  */
 class SplitInvoiceService
 {
-    public function __construct(private readonly BillingGuard $billing) {}
+    public function __construct(
+        private readonly BillingGuard $billing,
+        private readonly DocumentTemplateService $templates,
+    ) {}
 
     /**
      * Reconcile every Surat Jalan (PRIMARY + ADDON) under one Order and split
@@ -29,13 +32,17 @@ class SplitInvoiceService
      * new total, back to DRAFT so the Checker approves the new amount. A PAID
      * invoice is never reopened, which would erase its payment: what it does
      * not cover goes on one additional invoice.
+     *
+     * @param  array{document_template_id?: ?int, bank_account_id?: ?int}  $options
      */
-    public function generateInvoicesForOrder(Order $order): Collection
+    public function generateInvoicesForOrder(Order $order, array $options = []): Collection
     {
-        return DB::transaction(function () use ($order) {
+        return DB::transaction(function () use ($order, $options) {
             // Same row lock as approveInvoice(), so a revision and an approval
             // of the same Order can't interleave.
             Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+            $selection = $this->templates->invoiceSelection($options);
 
             $pendingSttCount = $order->orderItems()
                 ->whereNotNull('surat_jalan_id')
@@ -102,6 +109,14 @@ class SplitInvoiceService
                     continue;
                 }
 
+                // An additional invoice's lines repeat what is already paid,
+                // so a template without these would print a wrong total.
+                if ($paid->isNotEmpty() && $selection['template']?->usesAll(DocumentTemplateService::ADDITIONAL_INVOICE_PLACEHOLDERS) === false) {
+                    throw ValidationException::withMessages([
+                        'document_template_id' => 'Ini invoice tambahan, jadi templatenya harus memuat penanda ${total_barang} dan ${sudah_dibayar}.',
+                    ]);
+                }
+
                 // Keep a re-generated invoice's original number untouched;
                 // only mint a new one (with a per-dapur/supplier/day sequence,
                 // since the same dapur can bill the same supplier for a
@@ -123,7 +138,7 @@ class SplitInvoiceService
                     );
                 }
 
-                $attributes = [
+                $attributes = $selection['attributes'] + [
                     'invoice_number' => $invoiceNumber,
                     'dapur_id' => $order->dapur_id,
                     'total_amount' => $totalAmount,
@@ -131,6 +146,7 @@ class SplitInvoiceService
                     // A revised invoice's old PDF and due date no longer
                     // apply; approval sets both again.
                     'due_date' => null,
+                    'issued_at' => null,
                     'pdf_url' => null,
                 ];
 
@@ -169,6 +185,7 @@ class SplitInvoiceService
             $invoice->update([
                 'status' => 'ISSUED',
                 'due_date' => now()->addDays((int) config('finance.invoice_due_days'))->toDateString(),
+                'issued_at' => now('Asia/Jakarta')->toDateString(),
             ]);
 
             // Lines not yet shipped (e.g. dry goods held for stock) still

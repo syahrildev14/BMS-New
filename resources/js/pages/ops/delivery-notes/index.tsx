@@ -14,7 +14,7 @@ import { TableSearchInput } from '@/shared/components/ui/table-search-input';
 import { useTableControls, type TableColumn } from '@/shared/hooks/use-table-controls';
 import { errorAlert } from '@/shared/lib/alerts';
 import { formatQty } from '@/shared/lib/format';
-import type { Dapur, DeliveryDocumentType, SuratJalan } from '@/shared/types/prd.type';
+import type { Armada, Dapur, DeliveryDocumentType, DocumentTemplateOption, Driver, SuratJalan } from '@/shared/types/prd.type';
 
 interface Filters {
   dapur_id?: number | string;
@@ -54,11 +54,17 @@ export default function OpsDeliveryNotesIndex({
   filters,
   dapurs,
   pendingGroups,
+  documentTemplates,
+  armadas,
+  drivers,
   documents,
 }: {
   filters: Filters;
   dapurs: Pick<Dapur, 'id' | 'code' | 'name'>[];
   pendingGroups: PendingGroup[];
+  documentTemplates: DocumentTemplateOption[];
+  armadas: Pick<Armada, 'id' | 'name' | 'plate_number'>[];
+  drivers: Pick<Driver, 'id' | 'name'>[];
   documents: DocumentRow[];
 }) {
   const [dapurId, setDapurId] = useState(filters.dapur_id ? String(filters.dapur_id) : '');
@@ -66,6 +72,15 @@ export default function OpsDeliveryNotesIndex({
   const [date, setDate] = useState(filters.date);
   // 'all' = Generate semua; a number = one supplier group.
   const [processing, setProcessing] = useState<number | 'all' | null>(null);
+  const [templateId, setTemplateId] = useState('');
+  const [armadaId, setArmadaId] = useState('');
+  const [driverId, setDriverId] = useState('');
+
+  const templateOptions = documentTemplates.filter((template) => template.document_type === documentType);
+  const selectedTemplate = templateOptions.find((template) => String(template.id) === templateId);
+  const needsArmada = selectedTemplate?.placeholders.some((name) => name === 'armada_name' || name === 'no_pol') ?? false;
+  const needsDriver = selectedTemplate?.placeholders.includes('driver_name') ?? false;
+  const canGenerate = (templateOptions.length === 0 || !!selectedTemplate) && (!needsArmada || !!armadaId) && (!needsDriver || !!driverId);
 
   const { search, setSearch, sort, toggleSort, rows, page, setPage, totalPages, totalItems, pageSize } = useTableControls(documents, columns);
 
@@ -82,7 +97,15 @@ export default function OpsDeliveryNotesIndex({
     setProcessing(supplierId ?? 'all');
     router.post(
       route('ops.delivery-notes.store'),
-      { dapur_id: Number(dapurId), document_type: documentType, date, supplier_id: supplierId },
+      {
+        dapur_id: Number(dapurId),
+        document_type: documentType,
+        date,
+        supplier_id: supplierId,
+        document_template_id: selectedTemplate?.id ?? null,
+        armada_id: needsArmada ? Number(armadaId) : null,
+        driver_id: needsDriver ? Number(driverId) : null,
+      },
       {
         preserveScroll: true,
         onFinish: () => setProcessing(null),
@@ -115,7 +138,13 @@ export default function OpsDeliveryNotesIndex({
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Jenis</Label>
-          <Select value={documentType} onValueChange={(v) => setDocumentType(v as DeliveryDocumentType)}>
+          <Select
+            value={documentType}
+            onValueChange={(v) => {
+              setDocumentType(v as DeliveryDocumentType);
+              setTemplateId('');
+            }}
+          >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -143,11 +172,55 @@ export default function OpsDeliveryNotesIndex({
               Item siap kirim — {DOC_LABEL[documentType]} ({pendingGroups.length} supplier)
             </h2>
             {pendingGroups.length > 1 && (
-              <Button size="sm" onClick={() => generate(null)} disabled={processing !== null}>
+              <Button size="sm" onClick={() => generate(null)} disabled={processing !== null || !canGenerate}>
                 {processing === 'all' ? 'Memproses...' : 'Generate Semua'}
               </Button>
             )}
           </div>
+
+          {templateOptions.length > 0 && pendingGroups.length > 0 && (
+            <div className="grid gap-4 rounded-md border border-gray-200 p-4 sm:grid-cols-3">
+              <div className="flex flex-col gap-1.5">
+                <Label>Template Dokumen</Label>
+                <Select value={templateId} onValueChange={setTemplateId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih template..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templateOptions.map((template) => (
+                      <SelectItem key={template.id} value={String(template.id)}>
+                        {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {needsArmada && (
+                <div className="flex flex-col gap-1.5">
+                  <Label>Armada</Label>
+                  <Combobox
+                    value={armadaId}
+                    onValueChange={setArmadaId}
+                    placeholder="Pilih armada..."
+                    emptyText="Armada tidak ditemukan."
+                    options={armadas.map((armada) => ({ value: String(armada.id), label: `${armada.name} (${armada.plate_number})` }))}
+                  />
+                </div>
+              )}
+              {needsDriver && (
+                <div className="flex flex-col gap-1.5">
+                  <Label>Driver</Label>
+                  <Combobox
+                    value={driverId}
+                    onValueChange={setDriverId}
+                    placeholder="Pilih driver..."
+                    emptyText="Driver tidak ditemukan."
+                    options={drivers.map((driver) => ({ value: String(driver.id), label: driver.name }))}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {pendingGroups.length === 0 ? (
             <p className="text-sm text-gray-400">Tidak ada item yang perlu dibuatkan dokumen untuk pilihan ini.</p>
@@ -156,7 +229,7 @@ export default function OpsDeliveryNotesIndex({
               <div key={group.supplier_id} className="rounded-md border border-gray-200">
                 <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2">
                   <span className="font-medium">{group.supplier_name}</span>
-                  <Button size="sm" onClick={() => generate(group.supplier_id)} disabled={processing !== null}>
+                  <Button size="sm" onClick={() => generate(group.supplier_id)} disabled={processing !== null || !canGenerate}>
                     {processing === group.supplier_id ? 'Memproses...' : `Generate ${isDry ? 'Surat Jalan' : 'Tanda Terima'}`}
                   </Button>
                 </div>

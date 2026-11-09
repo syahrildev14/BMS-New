@@ -22,6 +22,42 @@ export interface Satuan {
   name: string;
 }
 
+export type DocumentTemplateType = 'SURAT_JALAN' | 'TANDA_TERIMA' | 'INVOICE';
+
+export interface DocumentTemplate {
+  id: number;
+  name: string;
+  document_type: DocumentTemplateType;
+  original_filename: string;
+  placeholders: string[];
+  is_active: boolean;
+  created_at: string;
+  uploaded_by?: { id: number; name: string } | null;
+}
+
+export type DocumentTemplateOption = Pick<DocumentTemplate, 'id' | 'name' | 'placeholders'> & { document_type?: DocumentTemplateType };
+
+export interface Armada {
+  id: number;
+  name: string;
+  plate_number: string;
+  is_active: boolean;
+}
+
+export interface Driver {
+  id: number;
+  name: string;
+  is_active: boolean;
+}
+
+export interface BankAccount {
+  id: number;
+  bank_name: string;
+  account_number: string;
+  account_holder: string;
+  is_active: boolean;
+}
+
 export interface Item {
   id: number;
   sku: string;

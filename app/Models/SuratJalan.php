@@ -45,6 +45,10 @@ class SuratJalan extends Model
         'verified_by',
         'verified_at',
         'printed_by',
+        'document_template_id',
+        'armada_name',
+        'plate_number',
+        'driver_name',
     ];
 
     protected function casts(): array
@@ -74,6 +78,11 @@ class SuratJalan extends Model
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);
+    }
+
+    public function documentTemplate(): BelongsTo
+    {
+        return $this->belongsTo(DocumentTemplate::class);
     }
 
     public function printedBy(): BelongsTo

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Finance;
 
 use App\Http\Controllers\Controller;
+use App\Models\BankAccount;
+use App\Models\DocumentTemplate;
 use App\Models\Invoice;
 use App\Models\Order;
 use App\Services\SplitInvoiceService;
@@ -30,9 +32,14 @@ class InvoiceController extends Controller
 
         return Inertia::render('finance/invoices/index', [
             'groups' => $groups,
-            'billableOrders' => Order::with('dapur')
+            'billableOrders' => Order::with(['dapur', 'invoices:id,order_id,document_template_id,bank_account'])
                 ->whereHas('orderItems', fn ($query) => $query->whereNotNull('qty_received'))
                 ->get(),
+            'documentTemplates' => DocumentTemplate::active()
+                ->where('document_type', DocumentTemplate::INVOICE)
+                ->orderBy('name')
+                ->get(['id', 'name', 'placeholders']),
+            'bankAccounts' => BankAccount::where('is_active', true)->orderBy('bank_name')->get(['id', 'bank_name', 'account_number', 'account_holder']),
         ]);
     }
 
@@ -51,10 +58,15 @@ class InvoiceController extends Controller
     {
         $validated = $request->validate([
             'order_id' => ['required', 'integer', 'exists:orders,id'],
+            'document_template_id' => ['nullable', 'integer'],
+            'bank_account_id' => ['nullable', 'integer'],
         ]);
 
         $order = Order::findOrFail($validated['order_id']);
-        $invoices = $service->generateInvoicesForOrder($order);
+        $invoices = $service->generateInvoicesForOrder($order, [
+            'document_template_id' => isset($validated['document_template_id']) ? (int) $validated['document_template_id'] : null,
+            'bank_account_id' => isset($validated['bank_account_id']) ? (int) $validated['bank_account_id'] : null,
+        ]);
 
         return back()->with('success', "{$invoices->count()} draft invoice dibuat, menunggu persetujuan.");
     }

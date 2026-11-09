@@ -98,7 +98,7 @@ Struktur tabel utama untuk diimplementasikan via Laravel Migrations:
 ### MODULE 3: DOKUMEN PENGIRIMAN PER DAPUR + SUPPLIER (SURAT JALAN KERING & TANDA TERIMA BASAH) *(direvisi 2026-11-05)*
 - **Kewenangan:** Hanya **Tim Ops** yang menerbitkan dokumen pengiriman (pemisahan tugas dari Finance, §Module 4).
 - **Dua jenis dokumen** (`surat_jalans.document_type`):
-  - `SURAT_JALAN` — **bahan kering** yang dikirim koperasi dari Gudang. Ops memilih Dapur dan "kirim semua order s.d. tanggal X": semua item DRY_GOODS yang belum terkirim dari order-order Dapur itu (`delivery_date <= X`) digabung, **satu dokumen per supplier** (mis. KOP MERAH PUTIH). Mendukung pengiriman serentak hari Minggu untuk beberapa order harian, maupun pengiriman di hari H. PDF berisi Surat Jalan + form Tanda Terima.
+  - `SURAT_JALAN` — **bahan kering** yang dikirim koperasi dari Gudang. Ops memilih Dapur dan "kirim semua order s.d. tanggal X": semua item DRY_GOODS yang belum terkirim dari order-order Dapur itu (`delivery_date <= X`) digabung, **satu dokumen per supplier** (mis. KOP MERAH PUTIH). Mendukung pengiriman serentak hari Minggu untuk beberapa order harian, maupun pengiriman di hari H. PDF format bawaan berisi Surat Jalan + form Tanda Terima; dokumen yang memakai template unggahan hanya berisi halaman Surat Jalan.
   - `TANDA_TERIMA` — **bahan basah** yang dikirim langsung supplier. Diterbitkan **setiap hari**, satu per Dapur per supplier untuk `delivery_date = tanggal kirim`. Supplier membawa dokumen ini dan Dapur menandatanganinya. WET_GOODS tidak pernah masuk Surat Jalan.
 - **Tautan item:** `order_items.surat_jalan_id` menautkan item ke dokumen; satu dokumen bisa mencakup item dari beberapa Order. `surat_jalans.order_id` hanya untuk data lama.
 - **PRIMARY / ADDON:** dokumen pertama untuk (Dapur, Supplier, jenis, tanggal kirim) = `PRIMARY`; dokumen berikutnya untuk kombinasi yang sama (item susulan, atau item kering yang sempat ditahan) = `ADDON`.
@@ -108,6 +108,7 @@ Struktur tabel utama untuk diimplementasikan via Laravel Migrations:
 - **Revisi Tier 2** yang belum disetujui Ops tidak pernah ikut dokumen.
 - **Idempotency & Double-Click Guard:** `DB::transaction()` + `lockForUpdate()` pada baris `order_items`, retry nomor dokumen pada duplicate key, dan tombol frontend *disabled* saat proses.
 - **Akses Dapur:** Dapur mengunduh dokumen per dokumen dari detail Order; akses dibatasi `surat_jalans.dapur_id`.
+- **Template Dokumen *(2026-11-09)*:** Admin mengunggah format Word (`.docx`) per jenis dokumen di master Template Dokumen. Selama ada template aktif untuk jenis itu, Ops wajib memilih satu template saat generate; satu proses generate memakai satu template. Armada dan Driver dipilih dari master bila template memuat penandanya, lalu nilainya disalin ke dokumen. File template tidak bisa ditimpa; template yang sudah dipakai hanya bisa dinonaktifkan. Selama belum ada template aktif, sistem memakai format PDF bawaan.
 
 ### MODULE 4: STT QC PASS/REJECT & RECONCILED SPLIT BILLING
 - **Dapur STT Input:** Dapur menginput data penerimaan barang berdasarkan Surat Tanda Terima (STT) fisik (`qty_received` & `qty_rejected`) untuk setiap `order_item` yang sudah memiliki Surat Jalan (`surat_jalan_id IS NOT NULL`). Input ini wajib ada sebelum Order tersebut bisa ditagih — lihat status implementasi di §5.
@@ -118,6 +119,7 @@ Struktur tabel utama untuk diimplementasikan via Laravel Migrations:
   - Sistem merekonsiliasi seluruh Surat Jalan (Utama + Susulan) di bawah `Order ID` yang sama, mengelompokkannya per `supplier_id`, dan menghitung tagihan **hanya dari item yang lolos QC**:
     $$\text{Total Invoice per Supplier} = \sum \left(\text{qty\_received} \times \text{final\_selling\_price}\right)$$
 - **PDF Rendering:** Menghasilkan PDF Invoice resmi per Supplier ID dengan format nomor **`INV/{YYYYMMDD}/{DAPUR_CODE}/{SUPP_CODE}`**, di mana `{SUPP_CODE}` adalah kolom `suppliers.code` (contoh: `SUP-BERAS`) — **bukan** `suppliers.id` numerik. PDF merangkum seluruh rincian pengiriman untuk keperluan audit LPJ.
+- **Template Invoice *(2026-11-09)*:** Selama ada template Invoice aktif, Finance wajib memilih template saat generate, dan memilih Rekening Bank bila template memuat penanda bank. Nilai rekening disalin ke invoice. PDF dibuat setelah invoice disetujui. Invoice tambahan untuk barang susulan pada invoice lunas wajib memakai template yang memuat `${total_barang}` dan `${sudah_dibayar}`.
 
 ### MODULE 5: GUDANG & PURCHASING *(baru, v5.1.0)*
 Mengelola buffer stok untuk barang `DRY_GOODS` — barang yang tidak perlu/tidak boleh dibeli dadakan setiap hari (beda dengan `WET_GOODS` yang tetap langsung dari Supplier, §Module 2).

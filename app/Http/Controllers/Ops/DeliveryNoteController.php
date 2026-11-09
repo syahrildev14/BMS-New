@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Ops;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\GenerateDeliveryNoteRequest;
+use App\Models\Armada;
 use App\Models\Dapur;
+use App\Models\DocumentTemplate;
+use App\Models\Driver;
 use App\Models\OrderItem;
 use App\Models\SuratJalan;
 use App\Services\DeliveryNoteService;
@@ -56,6 +59,12 @@ class DeliveryNoteController extends Controller
             'filters' => $filters,
             'dapurs' => Dapur::orderBy('name')->get(['id', 'code', 'name']),
             'pendingGroups' => $pendingGroups,
+            'documentTemplates' => DocumentTemplate::active()
+                ->whereIn('document_type', [DocumentTemplate::SURAT_JALAN, DocumentTemplate::TANDA_TERIMA])
+                ->orderBy('name')
+                ->get(['id', 'name', 'document_type', 'placeholders']),
+            'armadas' => Armada::where('is_active', true)->orderBy('name')->get(['id', 'name', 'plate_number']),
+            'drivers' => Driver::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'documents' => SuratJalan::with(['dapur:id,code,name', 'supplier:id,code,name'])
                 ->withCount('orderItems')
                 ->latest()
@@ -75,6 +84,10 @@ class DeliveryNoteController extends Controller
                 $validated['date'],
                 $request->user()->id,
                 isset($validated['supplier_id']) ? (int) $validated['supplier_id'] : null,
+                array_map(
+                    fn ($id) => $id === null ? null : (int) $id,
+                    array_intersect_key($validated, array_flip(['document_template_id', 'armada_id', 'driver_id'])),
+                ),
             );
         } catch (QueryException $e) {
             // Also a RuntimeException: must not reach the UI with raw SQL.

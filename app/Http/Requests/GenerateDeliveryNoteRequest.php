@@ -24,6 +24,9 @@ class GenerateDeliveryNoteRequest extends FormRequest
             'date' => ['required', 'date_format:Y-m-d'],
             // Null = one document for every supplier in the pending list.
             'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
+            'document_template_id' => ['nullable', 'integer'],
+            'armada_id' => ['nullable', 'integer'],
+            'driver_id' => ['nullable', 'integer'],
         ];
     }
 }

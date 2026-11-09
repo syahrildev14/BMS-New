@@ -42,6 +42,10 @@ export const menuConfig: MenuItem[] = [
       { label: 'Supplier', href: '/admin/suppliers', permission: 'suppliers.manage' },
       { label: 'Dapur', href: '/admin/dapurs', permission: 'dapurs.manage' },
       { label: 'Harga Harian', href: '/admin/pricing', permission: 'pricing.manage' },
+      { label: 'Template Dokumen', href: '/admin/document-templates', permission: 'document-templates.manage' },
+      { label: 'Armada', href: '/admin/armadas', permission: 'fleet.manage' },
+      { label: 'Driver', href: '/admin/drivers', permission: 'fleet.manage' },
+      { label: 'Rekening Bank', href: '/admin/bank-accounts', permission: 'bank-accounts.manage' },
     ],
   },
   {

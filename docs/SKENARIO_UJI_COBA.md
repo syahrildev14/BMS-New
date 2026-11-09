@@ -243,6 +243,35 @@ GROUP BY order_id, supplier_id
 HAVING COUNT(*) > 1;
 ```
 
+## T. Template Dokumen
+
+Kerjakan **setelah Grup A sampai H**, karena begitu ada template aktif, generate wajib memilih template. Buat order baru untuk grup ini.
+
+| No | OK | Pelaku | Langkah | Hasil diharapkan |
+|---|---|---|---|---|
+| T1 | ☐ | staging | Jalankan `docker compose exec app soffice --version` | Versi LibreOffice tampil |
+| T2 | ☐ | staging | Jalankan `docker compose exec app php artisan db:seed --class=RoleAndPermissionSeeder --force` lalu `permission:cache-reset` | Menu Template Dokumen, Armada, Driver, Rekening Bank muncul sesuai role |
+| T3 | ☐ | admin | Template Dokumen: unggah `Surat Jalan.docx` dan `Surat Tanda Terima.docx` sesuai jenisnya | Tersimpan, status Aktif |
+| T4 | ☐ | admin | Unggah `invoice.docx` jenis Invoice | Tersimpan |
+| T5 | ☐ | admin | Unggah Word dengan penanda salah ketik, misalnya `${nama_sppg}` | Ditolak, pesan menyebut penanda itu |
+| T6 | ☐ | admin | Unggah file yang bukan Word, atau ganti jenis menjadi tidak sesuai isinya | Ditolak, tidak ada template baru |
+| T7 | ☐ | ops, finance | Tambah Armada, Driver, dan Rekening Bank | Tersimpan |
+| T8 | ☐ | ops | Generate Surat Jalan tanpa memilih template | Tombol generate nonaktif sampai template dipilih |
+| T9 | ☐ | ops | Pilih template Surat Jalan | Pilihan Armada dan Driver muncul dan wajib diisi |
+| T10 | ☐ | ops | Generate lalu unduh PDF | PDF tampil seperti Word. Bandingkan kop, tabel, font, tanda tangan, dan jumlah halaman |
+| T11 | ☐ | ops | Generate Tanda Terima dengan template, lalu unduh | Tidak diminta armada atau driver. PDF sesuai format |
+| T12 | ☐ | ops | Ubah nomor polisi armada yang dipakai, lalu cek baris dokumen di database | `plate_number` dokumen tetap nilai lama |
+| T13 | ☐ | finance | Selesaikan STT dan Crosscheck, lalu generate invoice dengan template dan rekening | Draft dibuat, belum ada PDF |
+| T14 | ☐ | admin | Setujui invoice lalu unduh PDF | Nomor, tanggal berformat Indonesia, rekening, lampiran, dan total benar. Gambar dan tanda tangan tampil |
+| T15 | ☐ | finance | Generate ulang untuk order yang sama setelah ada perubahan | Template dan rekening sebelumnya terisi otomatis |
+| T16 | ☐ | admin | Nonaktifkan satu template | Tidak muncul lagi di pilihan generate |
+| T17 | ☐ | admin | Hapus template yang sudah dipakai | Ditolak, tetap tersimpan |
+| T18 | ☐ | finance | Buat kasus invoice tambahan (seperti Grup C) dengan template tanpa `${sudah_dibayar}` | Ditolak dengan pesan penanda wajib |
+| T19 | ☐ | admin, finance | Tambah `${total_barang}` dan `${sudah_dibayar}` ke `invoice.docx`, unggah sebagai template baru, generate lagi | Invoice tambahan dibuat, PDF menampilkan nilai yang benar |
+| T20 | ☐ | ops | Buat barang bernama `Cabai & Bawang`, generate dokumennya | PDF terbentuk dan nama tampil benar |
+| T21 | ☐ | dua ops | Generate dua dokumen berbeda bersamaan | Kedua PDF terbentuk dan tidak tertukar |
+| T22 | ☐ | staging | Hentikan sementara akses `soffice`, generate, lalu pulihkan dan unduh | Dokumen tetap tersimpan. PDF terbentuk saat diunduh setelah pulih |
+
 ## Log Temuan
 
 | ID Skenario | Tanggal | Penguji | Hasil yang terjadi | Screenshot/log | Tingkat (Tinggi/Sedang/Rendah) | Status |
@@ -253,7 +282,7 @@ HAVING COUNT(*) > 1;
 
 | OK | Kriteria |
 |---|---|
-| ☐ | Grup A, B, C, D, E, dan G lulus semua |
+| ☐ | Grup A, B, C, D, E, G, dan T lulus semua |
 | ☐ | Grup H lulus semua dan query pemeriksaan kosong |
 | ☐ | Grup F lulus, atau skenario yang tersisa disetujui penanggung jawab |
 | ☐ | Tidak ada temuan tingkat Tinggi yang masih terbuka |

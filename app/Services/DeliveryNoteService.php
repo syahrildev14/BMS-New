@@ -25,6 +25,7 @@ class DeliveryNoteService
 {
     public function __construct(
         private readonly StockService $stockService,
+        private readonly DocumentTemplateService $templates,
     ) {}
 
     /**
@@ -113,15 +114,16 @@ class DeliveryNoteService
      * cannot fully cover is held back (stays surat_jalan_id NULL) until it is
      * bought (Nota Pembelian) — it shows up on Purchasing's Daftar Belanja.
      *
+     * @param  array{document_template_id?: ?int, armada_id?: ?int, driver_id?: ?int}  $options
      * @return array{documents: Collection<int, SuratJalan>, held_items: Collection<int, OrderItem>}
      */
-    public function generateDocuments(int $dapurId, string $documentType, string $date, int $userId, ?int $supplierId = null): array
+    public function generateDocuments(int $dapurId, string $documentType, string $date, int $userId, ?int $supplierId = null, array $options = []): array
     {
         if (! in_array($documentType, [SuratJalan::SURAT_JALAN, SuratJalan::TANDA_TERIMA], true)) {
             throw new \InvalidArgumentException("Jenis dokumen tidak dikenal: {$documentType}.");
         }
 
-        $result = DB::transaction(function () use ($dapurId, $documentType, $date, $userId, $supplierId) {
+        $result = DB::transaction(function () use ($dapurId, $documentType, $date, $userId, $supplierId, $options) {
             // Serializes all document generation for this Dapur, which is what
             // keeps PRIMARY/ADDON and the daily number sequence correct under
             // concurrent requests. Must stay the first query: a plain read
@@ -129,6 +131,7 @@ class DeliveryNoteService
             // the PRIMARY/ADDON count would miss what the lock waited for.
             $dapur = Dapur::whereKey($dapurId)->lockForUpdate()->firstOrFail();
             $user = User::findOrFail($userId);
+            $templateAttributes = $this->templates->deliverySelection($documentType, $options);
 
             $candidates = $this->candidateQuery($dapurId, $documentType, $date)
                 ->with(['item', 'order', 'supplier'])
@@ -175,6 +178,7 @@ class DeliveryNoteService
                     $documentType,
                     $date,
                     $userId,
+                    $templateAttributes,
                 );
 
                 foreach ($lines as $orderItem) {
@@ -283,8 +287,10 @@ class DeliveryNoteService
      * Dapur row lock, so this only retries on a stray duplicate key.
      * The first document for a (Dapur, Supplier, type, shipment date) is
      * PRIMARY; any later one for the same combination is an ADDON.
+     *
+     * @param  array<string, int|string>  $templateAttributes
      */
-    private function createDocumentWithUniqueNumber(Dapur $dapur, Supplier $supplier, string $documentType, string $date, int $userId): SuratJalan
+    private function createDocumentWithUniqueNumber(Dapur $dapur, Supplier $supplier, string $documentType, string $date, int $userId, array $templateAttributes): SuratJalan
     {
         $prefix = $documentType === SuratJalan::SURAT_JALAN ? 'SJ' : 'TT';
 
@@ -301,7 +307,7 @@ class DeliveryNoteService
             $dailySequence = SuratJalan::where('sj_number', 'like', "{$datePrefix}%")->count() + $attempt;
 
             try {
-                return SuratJalan::create([
+                return SuratJalan::create($templateAttributes + [
                     'sj_number' => sprintf('%s%s/%02d', $datePrefix, $supplier->code, $dailySequence),
                     'document_type' => $documentType,
                     'dapur_id' => $dapur->id,

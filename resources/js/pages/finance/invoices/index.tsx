@@ -11,7 +11,9 @@ import { TableSearchInput } from '@/shared/components/ui/table-search-input';
 import { useTableControls, type TableColumn } from '@/shared/hooks/use-table-controls';
 import { errorAlert, listAlert } from '@/shared/lib/alerts';
 import { formatRupiah } from '@/shared/lib/format';
-import type { Order } from '@/shared/types/prd.type';
+import type { BankAccount, DocumentTemplateOption, Order } from '@/shared/types/prd.type';
+
+type BillableOrder = Order & { invoices?: { id: number; document_template_id: number | null; bank_account: string | null }[] };
 
 interface InvoiceDateGroup {
   date: string;
@@ -25,22 +27,54 @@ const columns: TableColumn<InvoiceDateGroup>[] = [
   { key: 'total_amount', accessor: (group) => Number(group.total_amount) },
 ];
 
-export default function FinanceInvoicesIndex({ groups, billableOrders }: { groups: InvoiceDateGroup[]; billableOrders: Order[] }) {
+export default function FinanceInvoicesIndex({
+  groups,
+  billableOrders,
+  documentTemplates,
+  bankAccounts,
+}: {
+  groups: InvoiceDateGroup[];
+  billableOrders: BillableOrder[];
+  documentTemplates: DocumentTemplateOption[];
+  bankAccounts: Pick<BankAccount, 'id' | 'bank_name' | 'account_number' | 'account_holder'>[];
+}) {
   const [orderId, setOrderId] = useState('');
+  const [templateId, setTemplateId] = useState('');
+  const [bankAccountId, setBankAccountId] = useState('');
   const [processing, setProcessing] = useState(false);
   const { search, setSearch, sort, toggleSort, rows, page, setPage, totalPages, totalItems, pageSize } = useTableControls(groups, columns);
 
+  const selectedTemplate = documentTemplates.find((template) => String(template.id) === templateId);
+  const needsBank = selectedTemplate?.placeholders.some((name) => name.startsWith('bank_')) ?? false;
+  const canGenerate = !!orderId && (documentTemplates.length === 0 || !!selectedTemplate) && (!needsBank || !!bankAccountId);
+
+  // Regenerating keeps the previous choice, when it is still selectable.
+  const selectOrder = (value: string) => {
+    setOrderId(value);
+
+    const previous = billableOrders.find((order) => String(order.id) === value)?.invoices?.findLast((invoice) => invoice.document_template_id !== null);
+    const template = documentTemplates.find((option) => option.id === previous?.document_template_id);
+    const bank = bankAccounts.find((account) => account.account_number === previous?.bank_account);
+
+    setTemplateId(template ? String(template.id) : '');
+    setBankAccountId(bank ? String(bank.id) : '');
+  };
+
   const submit: FormEventHandler = (e) => {
     e.preventDefault();
-    if (!orderId) return;
+    if (!canGenerate) return;
 
     setProcessing(true);
     router.post(
       route('finance.invoices.store'),
-      { order_id: Number(orderId) },
+      {
+        order_id: Number(orderId),
+        document_template_id: selectedTemplate?.id ?? null,
+        bank_account_id: needsBank ? Number(bankAccountId) : null,
+      },
       {
         onFinish: () => setProcessing(false),
-        onSuccess: () => setOrderId(''),
+        onSuccess: () => selectOrder(''),
         onError: (errors) => {
           if (errors.unpriced_items) {
             listAlert(
@@ -67,12 +101,12 @@ export default function FinanceInvoicesIndex({ groups, billableOrders }: { group
         breadcrumbs={[{ label: 'Finance' }, { label: 'Invoice' }]}
       />
 
-      <form onSubmit={submit} className="mb-6 flex items-end gap-2 rounded-lg border border-gray-200 p-4">
-        <div className="flex flex-1 flex-col gap-1.5">
+      <form onSubmit={submit} className="mb-6 flex flex-wrap items-end gap-2 rounded-lg border border-gray-200 p-4">
+        <div className="flex min-w-64 flex-1 flex-col gap-1.5">
           <label className="text-sm font-medium text-gray-700">Order yang siap ditagih</label>
           <Combobox
             value={orderId}
-            onValueChange={setOrderId}
+            onValueChange={selectOrder}
             placeholder="Ketik untuk cari order..."
             emptyText="Order tidak ditemukan."
             options={billableOrders.map((order) => ({
@@ -81,7 +115,31 @@ export default function FinanceInvoicesIndex({ groups, billableOrders }: { group
             }))}
           />
         </div>
-        <Button type="submit" disabled={!orderId || processing}>
+        {documentTemplates.length > 0 && (
+          <div className="flex min-w-48 flex-col gap-1.5">
+            <label className="text-sm font-medium text-gray-700">Template Invoice</label>
+            <Combobox
+              value={templateId}
+              onValueChange={setTemplateId}
+              placeholder="Pilih template..."
+              emptyText="Template tidak ditemukan."
+              options={documentTemplates.map((template) => ({ value: String(template.id), label: template.name }))}
+            />
+          </div>
+        )}
+        {needsBank && (
+          <div className="flex min-w-48 flex-col gap-1.5">
+            <label className="text-sm font-medium text-gray-700">Rekening Bank</label>
+            <Combobox
+              value={bankAccountId}
+              onValueChange={setBankAccountId}
+              placeholder="Pilih rekening..."
+              emptyText="Rekening tidak ditemukan."
+              options={bankAccounts.map((account) => ({ value: String(account.id), label: `${account.bank_name} ${account.account_number}` }))}
+            />
+          </div>
+        )}
+        <Button type="submit" disabled={!canGenerate || processing}>
           {processing ? 'Memproses...' : 'Generate Split Invoice'}
         </Button>
       </form>

@@ -37,6 +37,9 @@ class RoleAndPermissionSeeder extends Seeder
             'stock.manage',
             'system.backup.manage',
             'system.audit-log.view',
+            'document-templates.manage',
+            'fleet.manage',
+            'bank-accounts.manage',
         ];
 
         foreach ($permissions as $permission) {
@@ -45,9 +48,9 @@ class RoleAndPermissionSeeder extends Seeder
 
         $rolePermissions = [
             'dapur' => ['orders.manage'],
-            'ops' => ['delivery-notes.manage', 'delivery-verifications.manage', 'revisions.approve'],
+            'ops' => ['delivery-notes.manage', 'delivery-verifications.manage', 'revisions.approve', 'fleet.manage'],
             'purchasing' => ['pricing.manage', 'items.manage', 'suppliers.manage', 'satuans.manage', 'purchase-orders.manage', 'purchase-notes.manage'],
-            'finance' => ['invoices.manage', 'supplier-bills.manage'],
+            'finance' => ['invoices.manage', 'supplier-bills.manage', 'bank-accounts.manage'],
             'gudang' => ['stock.manage'],
             'admin' => $permissions,
         ];

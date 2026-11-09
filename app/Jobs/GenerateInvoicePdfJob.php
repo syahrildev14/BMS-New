@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Invoice;
+use App\Services\DocumentRenderService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -19,23 +20,18 @@ class GenerateInvoicePdfJob implements ShouldQueue
 
     public function __construct(private readonly int $invoiceId) {}
 
-    public function handle(): void
+    public function handle(DocumentRenderService $renderer): void
     {
-        $invoice = Invoice::with(['order.orderItems.item.satuan', 'dapur', 'supplier'])->findOrFail($this->invoiceId);
+        $invoice = Invoice::with(['order.orderItems.item.satuan', 'dapur', 'supplier', 'documentTemplate'])->findOrFail($this->invoiceId);
 
         // The lines table lists every line of this (order, supplier), so an
         // additional invoice must show what earlier paid ones already covered.
-        $paidInvoices = Invoice::where('order_id', $invoice->order_id)
-            ->where('supplier_id', $invoice->supplier_id)
-            ->where('status', 'PAID')
-            ->where('id', '<', $invoice->id)
-            ->orderBy('id')
-            ->get();
-
-        $pdf = Pdf::loadView('pdf.invoice', ['invoice' => $invoice, 'paidInvoices' => $paidInvoices]);
+        $content = $invoice->documentTemplate
+            ? $renderer->renderInvoice($invoice)
+            : Pdf::loadView('pdf.invoice', ['invoice' => $invoice, 'paidInvoices' => $invoice->earlierPaidInvoices()])->output();
 
         $path = sprintf('invoices/%s.pdf', str_replace('/', '-', $invoice->invoice_number));
-        Storage::disk('local')->put($path, $pdf->output());
+        Storage::disk('local')->put($path, $content);
 
         $invoice->update(['pdf_url' => $path]);
     }

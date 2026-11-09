@@ -7,11 +7,14 @@ ARG GID=1000
 # - libpng/libjpeg/libfreetype -> ekstensi gd (dibutuhkan dompdf)
 # - default-mysql-client       -> mysqldump untuk fitur Backup (BackupService)
 # - libzip/libicu              -> ekstensi zip & intl
+# - libreoffice-writer + fonts -> konversi template Word ke PDF; Carlito dan
+#   Caladea pengganti metrik Calibri/Cambria agar tata letak tidak bergeser
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git unzip curl \
         libpng-dev libjpeg62-turbo-dev libfreetype6-dev \
         libzip-dev libicu-dev libonig-dev libxml2-dev \
         default-mysql-client \
+        libreoffice-writer fonts-liberation fonts-crosextra-carlito fonts-crosextra-caladea \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" \
         pdo_mysql mbstring exif pcntl bcmath gd zip intl opcache \

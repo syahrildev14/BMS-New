@@ -1,8 +1,12 @@
 <?php
 
+use App\Http\Controllers\Admin\ArmadaController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BackupController;
+use App\Http\Controllers\Admin\BankAccountController;
 use App\Http\Controllers\Admin\DapurController;
+use App\Http\Controllers\Admin\DocumentTemplateController;
+use App\Http\Controllers\Admin\DriverController;
 use App\Http\Controllers\Admin\ItemController;
 use App\Http\Controllers\Admin\PricingController;
 use App\Http\Controllers\Admin\RoleController;
@@ -168,6 +172,18 @@ Route::middleware(['auth'])->group(function () {
         Route::resource('dapurs', DapurController::class)
             ->only(['index', 'store', 'update', 'destroy'])
             ->middleware('permission:dapurs.manage');
+        Route::resource('document-templates', DocumentTemplateController::class)
+            ->only(['index', 'store', 'update', 'destroy'])
+            ->middleware('permission:document-templates.manage');
+        Route::resource('armadas', ArmadaController::class)
+            ->only(['index', 'store', 'update', 'destroy'])
+            ->middleware('permission:fleet.manage');
+        Route::resource('drivers', DriverController::class)
+            ->only(['index', 'store', 'update', 'destroy'])
+            ->middleware('permission:fleet.manage');
+        Route::resource('bank-accounts', BankAccountController::class)
+            ->only(['index', 'store', 'update', 'destroy'])
+            ->middleware('permission:bank-accounts.manage');
 
         Route::post('backups/export', [BackupController::class, 'export'])
             ->middleware('permission:system.backup.manage')
