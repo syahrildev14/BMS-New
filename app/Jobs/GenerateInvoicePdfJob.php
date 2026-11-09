@@ -23,7 +23,16 @@ class GenerateInvoicePdfJob implements ShouldQueue
     {
         $invoice = Invoice::with(['order.orderItems.item.satuan', 'dapur', 'supplier'])->findOrFail($this->invoiceId);
 
-        $pdf = Pdf::loadView('pdf.invoice', ['invoice' => $invoice]);
+        // The lines table lists every line of this (order, supplier), so an
+        // additional invoice must show what earlier paid ones already covered.
+        $paidInvoices = Invoice::where('order_id', $invoice->order_id)
+            ->where('supplier_id', $invoice->supplier_id)
+            ->where('status', 'PAID')
+            ->where('id', '<', $invoice->id)
+            ->orderBy('id')
+            ->get();
+
+        $pdf = Pdf::loadView('pdf.invoice', ['invoice' => $invoice, 'paidInvoices' => $paidInvoices]);
 
         $path = sprintf('invoices/%s.pdf', str_replace('/', '-', $invoice->invoice_number));
         Storage::disk('local')->put($path, $pdf->output());

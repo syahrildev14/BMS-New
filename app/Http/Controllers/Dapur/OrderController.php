@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Dapur;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreOrderRequest;
 use App\Jobs\GenerateTandaTerimaPdfJob;
+use App\Models\Dapur;
 use App\Models\DeliveryDocumentPhoto;
 use App\Models\Item;
 use App\Models\Order;
@@ -29,6 +30,8 @@ use Throwable;
 
 class OrderController extends Controller
 {
+    private const ITEM_SHIPPED_MESSAGE = 'Item ini sudah punya Surat Jalan dan tidak bisa diedit lagi.';
+
     public function index(Request $request): Response
     {
         $dapurId = $request->user()->dapur_id;
@@ -305,7 +308,7 @@ class OrderController extends Controller
             'qty_ordered' => ['required', 'numeric', 'min:0.01', 'max:99999999.99'],
         ]);
 
-        $orderItem->update($validated);
+        DB::transaction(fn () => $this->lockUnshippedItem($orderItem)->update($validated));
 
         return back()->with('success', 'Qty item berhasil diperbarui.');
     }
@@ -314,7 +317,7 @@ class OrderController extends Controller
     {
         $this->authorizeEditableItem($request, $order, $orderItem);
 
-        $orderItem->delete();
+        DB::transaction(fn () => $this->lockUnshippedItem($orderItem)->delete());
 
         return back()->with('success', 'Item berhasil dihapus dari order.');
     }
@@ -323,7 +326,21 @@ class OrderController extends Controller
     {
         abort_unless($order->dapur_id === $request->user()->dapur_id, 403);
         abort_unless($orderItem->order_id === $order->id, 404);
-        abort_unless($orderItem->surat_jalan_id === null, 422, 'Item ini sudah punya Surat Jalan dan tidak bisa diedit lagi.');
+        abort_unless($orderItem->surat_jalan_id === null, 422, self::ITEM_SHIPPED_MESSAGE);
+    }
+
+    /**
+     * Same row lock as DeliveryNoteService's candidate query: the route-bound
+     * model may predate a document generated since, which already consumed
+     * stock for the old quantity.
+     */
+    private function lockUnshippedItem(OrderItem $orderItem): OrderItem
+    {
+        $locked = OrderItem::whereKey($orderItem->id)->lockForUpdate()->firstOrFail();
+
+        abort_unless($locked->surat_jalan_id === null, 422, self::ITEM_SHIPPED_MESSAGE);
+
+        return $locked;
     }
 
     /**
@@ -358,13 +375,13 @@ class OrderController extends Controller
      * The per-dapur daily sequence keeps it unique regardless of how many
      * Orders are created that day.
      */
-    private function generateOrderNumber(int $dapurId): string
+    private function generateOrderNumber(int $dapurId, int $attempt): string
     {
         $today = now();
 
         $sequence = Order::where('dapur_id', $dapurId)
             ->whereDate('created_at', $today->toDateString())
-            ->count() + 1;
+            ->count() + $attempt;
 
         return sprintf('ORD/%s/%s/%02d', $today->format('Ymd'), $dapurId, $sequence);
     }
@@ -382,6 +399,11 @@ class OrderController extends Controller
      */
     private function findOrCreateOrderSafely(int $dapurId, array $validated): Order
     {
+        // Serializes Order creation per Dapur and must stay the transaction's
+        // first query: the order-number count below is a plain read, so its
+        // REPEATABLE READ snapshot has to be taken after this lock is held.
+        Dapur::whereKey($dapurId)->lockForUpdate()->firstOrFail();
+
         $maxAttempts = 5;
 
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
@@ -401,7 +423,7 @@ class OrderController extends Controller
                 return Order::create([
                     'dapur_id' => $dapurId,
                     'delivery_date' => $validated['delivery_date'],
-                    'order_number' => $this->generateOrderNumber($dapurId),
+                    'order_number' => $this->generateOrderNumber($dapurId, $attempt),
                     'status' => 'DRAFT',
                     'notes' => $validated['notes'] ?? null,
                 ]);

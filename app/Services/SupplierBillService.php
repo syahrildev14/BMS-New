@@ -23,9 +23,18 @@ use Illuminate\Validation\ValidationException;
  */
 class SupplierBillService
 {
+    public function __construct(private readonly BillingGuard $billing) {}
+
+    /**
+     * Same rules as SplitInvoiceService::generateInvoicesForOrder(): a late
+     * shipment revises an ISSUED/OVERDUE bill back to DRAFT under its own
+     * number, and what a PAID bill does not cover goes on one additional bill.
+     */
     public function generateBillsForOrder(Order $order): Collection
     {
         return DB::transaction(function () use ($order) {
+            Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+
             $pendingSttCount = $order->orderItems()
                 ->whereNotNull('surat_jalan_id')
                 ->whereNull('qty_received')
@@ -37,13 +46,15 @@ class SupplierBillService
                 "Tidak bisa generate bill: {$pendingSttCount} item yang sudah dikirim (Surat Jalan) belum diinput STT (qty_received) oleh Dapur."
             );
 
+            $this->billing->assertDocumentsVerified($order);
+
             $orderItems = $order->orderItems()->whereNotNull('qty_received')->with(['supplier', 'item'])->get();
 
             // Same reasoning as SplitInvoiceService::generateInvoicesForOrder():
             // WET_GOODS only gets final_cost_price from a daily price synced
             // for this Order's exact delivery_date — if that hasn't happened
             // yet, billing (qty * null) would silently compute 0.
-            $unpriced = $orderItems->whereNull('final_cost_price');
+            $unpriced = $this->billing->unpricedLines($orderItems, 'final_cost_price');
 
             if ($unpriced->isNotEmpty()) {
                 $dateStr = $order->delivery_date->toDateString();
@@ -58,24 +69,25 @@ class SupplierBillService
             $bills = collect();
 
             foreach ($groupedItems as $supplierId => $items) {
-                $existing = SupplierBill::where('order_id', $order->id)->where('supplier_id', $supplierId)->first();
+                $billed = SupplierBill::where('order_id', $order->id)->where('supplier_id', $supplierId)->get();
+                $paid = $billed->where('status', 'PAID');
+                $existing = $billed->firstWhere('status', '!=', 'PAID');
 
-                $totalAmount = $items->sum(function ($item) {
-                    return ((float) $item->qty_received - (float) $item->qty_rejected) * $item->final_cost_price;
-                });
+                $totalAmount = round($this->billing->billableTotal($items, 'final_cost_price') - (float) $paid->sum('total_amount'), 2);
 
-                if ($existing && in_array($existing->status, BillingGuard::FINAL_STATUSES, true)) {
-                    // Same reasoning as SplitInvoiceService::generateInvoicesForOrder():
-                    // a late add-on Surat Jalan STT-ed after this bill was
-                    // already approved must not be silently dropped.
+                if ($paid->isNotEmpty() && $totalAmount <= 0) {
                     abort_if(
-                        round($totalAmount, 2) !== round((float) $existing->total_amount, 2),
+                        $totalAmount < 0,
                         422,
-                        "Bill {$existing->bill_number} sudah {$existing->status}, tapi ada perubahan kuantitas tertagih (kemungkinan Surat Jalan susulan yang baru di-STT) untuk supplier ini — total baru ".
-                            number_format($totalAmount, 2).' vs bill yang sudah terbit '.number_format((float) $existing->total_amount, 2).
-                            '. Bill yang sudah terbit tidak ditimpa otomatis — butuh bill/penyesuaian susulan secara manual.'
+                        'Bill yang sudah lunas untuk supplier ini melebihi nilai barang tertagih sebesar '.number_format(abs($totalAmount), 2).'. Perlu penyesuaian manual.'
                     );
 
+                    $bills->push($paid->last());
+
+                    continue;
+                }
+
+                if ($existing && in_array($existing->status, BillingGuard::FINAL_STATUSES, true) && $totalAmount === round((float) $existing->total_amount, 2)) {
                     $bills->push($existing);
 
                     continue;
@@ -97,20 +109,17 @@ class SupplierBillService
                     );
                 }
 
-                $bill = SupplierBill::updateOrCreate(
-                    [
-                        'order_id' => $order->id,
-                        'supplier_id' => $supplierId,
-                    ],
-                    [
-                        'bill_number' => $billNumber,
-                        'dapur_id' => $order->dapur_id,
-                        'total_amount' => $totalAmount,
-                        'status' => 'DRAFT',
-                    ]
-                );
+                $attributes = [
+                    'bill_number' => $billNumber,
+                    'dapur_id' => $order->dapur_id,
+                    'total_amount' => $totalAmount,
+                    'status' => 'DRAFT',
+                    'due_date' => null,
+                ];
 
-                $bills->push($bill);
+                $bills->push($existing
+                    ? tap($existing)->update($attributes)
+                    : SupplierBill::create($attributes + ['order_id' => $order->id, 'supplier_id' => $supplierId]));
             }
 
             return $bills;
@@ -119,14 +128,23 @@ class SupplierBillService
 
     public function approveBill(SupplierBill $bill): SupplierBill
     {
-        abort_unless($bill->status === 'DRAFT', 422, 'Hanya bill berstatus DRAFT yang bisa disetujui.');
+        return DB::transaction(function () use ($bill) {
+            $order = Order::whereKey($bill->order_id)->lockForUpdate()->firstOrFail();
 
-        $bill->update([
-            'status' => 'ISSUED',
-            'due_date' => now()->addDays((int) config('finance.supplier_bill_due_days'))->toDateString(),
-        ]);
+            // Re-read under lock: voiding a draft must beat a stale page.
+            $fresh = SupplierBill::whereKey($bill->id)->lockForUpdate()->firstOrFail();
+            abort_unless($fresh->status === 'DRAFT', 422, 'Hanya bill berstatus DRAFT yang bisa disetujui.');
 
-        return $bill->refresh();
+            $this->billing->assertDocumentsVerified($order);
+            $this->billing->assertDraftAmountCurrent($order, $fresh);
+
+            $fresh->update([
+                'status' => 'ISSUED',
+                'due_date' => now()->addDays((int) config('finance.supplier_bill_due_days'))->toDateString(),
+            ]);
+
+            return $fresh;
+        });
     }
 
     public function rejectBill(SupplierBill $bill): SupplierBill

@@ -60,7 +60,7 @@ class DeliveryVerificationService
         return DB::transaction(function () use ($document, $user, $notes) {
             $document = $this->lock($document);
 
-            $lines = $document->orderItems()->get(['order_id', 'supplier_id']);
+            $lines = $document->orderItems()->get(['order_items.id', 'order_id', 'supplier_id']);
 
             // Only reopening is refused: a document not yet verified can have
             // a real shortage to record even when an earlier document for the

@@ -54,11 +54,12 @@ it('does not silently drop a late add-on shipment STT-ed after its invoice was a
         'final_selling_price' => 1000,
     ]);
 
-    // Regenerating must NOT silently leave the add-on's 4,000 unbilled.
-    expect(fn () => $service->generateInvoicesForOrder($order))
-        ->toThrow(RuntimeException::class);
+    // Regenerating must NOT silently leave the add-on's 4,000 unbilled: it
+    // goes onto the same invoice, which needs the Checker's approval again.
+    $service->generateInvoicesForOrder($order);
 
     expect(Invoice::count())->toBe(1);
     $invoice->refresh();
-    expect((float) $invoice->total_amount)->toBe(10000.0);
+    expect($invoice->status)->toBe('DRAFT');
+    expect((float) $invoice->total_amount)->toBe(14000.0);
 });

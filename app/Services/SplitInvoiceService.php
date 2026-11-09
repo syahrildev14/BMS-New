@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Jobs\GenerateInvoicePdfJob;
 use App\Models\Invoice;
 use App\Models\Order;
-use App\Models\SuratJalan;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -20,16 +19,24 @@ use Throwable;
  */
 class SplitInvoiceService
 {
+    public function __construct(private readonly BillingGuard $billing) {}
+
     /**
      * Reconcile every Surat Jalan (PRIMARY + ADDON) under one Order and split
      * the billing per supplier_id, counting only quantities that passed QC.
-     * Invoices already ISSUED are left untouched — only DRAFT/VOID rows (or
-     * brand new ones) get their totals recomputed, so a re-generate can't
-     * silently undo an approved invoice.
+     * A final invoice whose total is unchanged is left untouched. A late
+     * shipment is billed on the existing ISSUED/OVERDUE invoice: same number,
+     * new total, back to DRAFT so the Checker approves the new amount. A PAID
+     * invoice is never reopened, which would erase its payment: what it does
+     * not cover goes on one additional invoice.
      */
     public function generateInvoicesForOrder(Order $order): Collection
     {
         return DB::transaction(function () use ($order) {
+            // Same row lock as approveInvoice(), so a revision and an approval
+            // of the same Order can't interleave.
+            Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+
             $pendingSttCount = $order->orderItems()
                 ->whereNotNull('surat_jalan_id')
                 ->whereNull('qty_received')
@@ -41,7 +48,7 @@ class SplitInvoiceService
                 "Tidak bisa generate invoice: {$pendingSttCount} item yang sudah dikirim (Surat Jalan) belum diinput STT (qty_received) oleh Dapur."
             );
 
-            $this->assertDocumentsVerified($order);
+            $this->billing->assertDocumentsVerified($order);
 
             $orderItems = $order->orderItems()->whereNotNull('qty_received')->with(['supplier', 'item'])->get();
 
@@ -52,7 +59,7 @@ class SplitInvoiceService
             // (qty * null) silently computes 0 instead of erroring, so this
             // must be checked explicitly rather than relying on the
             // arithmetic to fail loudly on its own.
-            $unpriced = $orderItems->whereNull('final_selling_price');
+            $unpriced = $this->billing->unpricedLines($orderItems, 'final_selling_price');
 
             if ($unpriced->isNotEmpty()) {
                 $dateStr = $order->delivery_date->toDateString();
@@ -71,30 +78,25 @@ class SplitInvoiceService
             $invoices = collect();
 
             foreach ($groupedItems as $supplierId => $items) {
-                $existing = Invoice::where('order_id', $order->id)->where('supplier_id', $supplierId)->first();
+                $billed = Invoice::where('order_id', $order->id)->where('supplier_id', $supplierId)->get();
+                $paid = $billed->where('status', 'PAID');
+                $existing = $billed->firstWhere('status', '!=', 'PAID');
 
-                // Only quantity that actually passed QC is billable (PRD
-                // §Module 4 Reconciled Split Billing) — qty_rejected must be
-                // subtracted, not just qty_received on its own.
-                $totalAmount = $items->sum(function ($item) {
-                    return ((float) $item->qty_received - (float) $item->qty_rejected) * $item->final_selling_price;
-                });
+                $totalAmount = round($this->billing->billableTotal($items, 'final_selling_price') - (float) $paid->sum('total_amount'), 2);
 
-                if ($existing && in_array($existing->status, BillingGuard::FINAL_STATUSES, true)) {
-                    // A later add-on Surat Jalan (PRD §Module 3) for this
-                    // same Order+Supplier can get STT-ed after this invoice
-                    // was already approved — silently `continue`-ing here
-                    // would permanently drop that amount from any invoice.
-                    // Fail loudly instead so Finance has to handle the
-                    // adjustment, rather than losing it unnoticed.
+                if ($paid->isNotEmpty() && $totalAmount <= 0) {
                     abort_if(
-                        round($totalAmount, 2) !== round((float) $existing->total_amount, 2),
+                        $totalAmount < 0,
                         422,
-                        "Invoice {$existing->invoice_number} sudah {$existing->status}, tapi ada perubahan kuantitas tertagih (kemungkinan Surat Jalan susulan yang baru di-STT) untuk supplier ini — total baru ".
-                            number_format($totalAmount, 2).' vs invoice yang sudah terbit '.number_format((float) $existing->total_amount, 2).
-                            '. Invoice yang sudah terbit tidak ditimpa otomatis — butuh invoice/penyesuaian susulan secara manual.'
+                        'Invoice yang sudah lunas untuk supplier ini melebihi nilai barang tertagih sebesar '.number_format(abs($totalAmount), 2).'. Perlu penyesuaian manual.'
                     );
 
+                    $invoices->push($paid->last());
+
+                    continue;
+                }
+
+                if ($existing && in_array($existing->status, BillingGuard::FINAL_STATUSES, true) && $totalAmount === round((float) $existing->total_amount, 2)) {
                     $invoices->push($existing);
 
                     continue;
@@ -121,46 +123,24 @@ class SplitInvoiceService
                     );
                 }
 
-                $invoice = Invoice::updateOrCreate(
-                    [
-                        'order_id' => $order->id,
-                        'supplier_id' => $supplierId,
-                    ],
-                    [
-                        'invoice_number' => $invoiceNumber,
-                        'dapur_id' => $order->dapur_id,
-                        'total_amount' => $totalAmount,
-                        'status' => 'DRAFT',
-                    ]
-                );
+                $attributes = [
+                    'invoice_number' => $invoiceNumber,
+                    'dapur_id' => $order->dapur_id,
+                    'total_amount' => $totalAmount,
+                    'status' => 'DRAFT',
+                    // A revised invoice's old PDF and due date no longer
+                    // apply; approval sets both again.
+                    'due_date' => null,
+                    'pdf_url' => null,
+                ];
 
-                $invoices->push($invoice);
+                $invoices->push($existing
+                    ? tap($existing)->update($attributes)
+                    : Invoice::create($attributes + ['order_id' => $order->id, 'supplier_id' => $supplierId]));
             }
 
             return $invoices;
         });
-    }
-
-    /**
-     * Crosscheck H+1: every per-supplier document under this Order must be
-     * VERIFIED. Takes the document row lock DeliveryVerificationService uses,
-     * so billing and a reopen can't interleave. Legacy documents (no
-     * supplier_id) predate the crosscheck and are exempt.
-     */
-    private function assertDocumentsVerified(Order $order): void
-    {
-        $unverified = SuratJalan::whereIn('id', $order->orderItems()->whereNotNull('surat_jalan_id')->select('surat_jalan_id'))
-            ->whereNotNull('supplier_id')
-            ->lockForUpdate()
-            ->get()
-            ->where('verification_status', '!=', SuratJalan::VERIFICATION_VERIFIED)
-            ->pluck('sj_number');
-
-        if ($unverified->isNotEmpty()) {
-            throw ValidationException::withMessages([
-                'order_id' => 'Dokumen belum lolos Crosscheck H+1: '.$unverified->implode(', ').'.',
-            ]);
-        }
     }
 
     /**
@@ -183,7 +163,8 @@ class SplitInvoiceService
             // since this draft was generated must block approval.
             $fresh = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
             abort_unless($fresh->status === 'DRAFT', 422, 'Hanya invoice berstatus DRAFT yang bisa disetujui.');
-            $this->assertDocumentsVerified($order);
+            $this->billing->assertDocumentsVerified($order);
+            $this->billing->assertDraftAmountCurrent($order, $fresh);
 
             $invoice->update([
                 'status' => 'ISSUED',

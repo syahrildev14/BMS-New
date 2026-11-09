@@ -9,6 +9,7 @@ use App\Models\Dapur;
 use App\Models\Gudang;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\StockLot;
 use App\Models\Supplier;
 use App\Models\SuratJalan;
 use App\Models\User;
@@ -43,7 +44,19 @@ class DeliveryNoteService
      */
     private function partitionByStock(Collection $orderItems, int $gudangId): array
     {
-        $remainingByItem = [];
+        // Row-locked so another Dapur's shipment of the same item waits here
+        // and then reads what is really left, instead of failing in FIFO.
+        $remainingByItem = StockLot::where('gudang_id', $gudangId)
+            ->whereIn('item_id', $orderItems->pluck('item_id')->unique())
+            ->where('qty_remaining', '>', 0)
+            ->orderBy('item_id')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get()
+            ->groupBy('item_id')
+            ->map(fn (Collection $lots) => round((float) $lots->sum('qty_remaining'), 2))
+            ->all();
+
         $sufficient = collect();
         $insufficient = collect();
 
@@ -55,16 +68,13 @@ class DeliveryNoteService
         foreach ($ordered as $orderItem) {
             $itemId = $orderItem->item_id;
 
-            if (! array_key_exists($itemId, $remainingByItem)) {
-                $remainingByItem[$itemId] = $this->stockService->availableStock($gudangId, $itemId);
-            }
-
+            $remaining = $remainingByItem[$itemId] ?? 0.0;
             $needed = (float) $orderItem->qty_ordered;
 
             // Same 0.0001 tolerance as StockService::deductFromLots(); rounded
             // because 0.3 - 0.1 is 0.19999... in floating point.
-            if ($needed <= $remainingByItem[$itemId] + 0.0001) {
-                $remainingByItem[$itemId] = round($remainingByItem[$itemId] - $needed, 2);
+            if ($needed <= $remaining + 0.0001) {
+                $remainingByItem[$itemId] = round($remaining - $needed, 2);
                 $sufficient->push($orderItem);
             } else {
                 $insufficient->push($orderItem);
@@ -112,11 +122,13 @@ class DeliveryNoteService
         }
 
         $result = DB::transaction(function () use ($dapurId, $documentType, $date, $userId, $supplierId) {
-            $user = User::findOrFail($userId);
             // Serializes all document generation for this Dapur, which is what
             // keeps PRIMARY/ADDON and the daily number sequence correct under
-            // concurrent requests.
+            // concurrent requests. Must stay the first query: a plain read
+            // before it would fix the REPEATABLE READ snapshot pre-lock, and
+            // the PRIMARY/ADDON count would miss what the lock waited for.
             $dapur = Dapur::whereKey($dapurId)->lockForUpdate()->firstOrFail();
+            $user = User::findOrFail($userId);
 
             $candidates = $this->candidateQuery($dapurId, $documentType, $date)
                 ->with(['item', 'order', 'supplier'])

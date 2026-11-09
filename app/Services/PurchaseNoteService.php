@@ -128,7 +128,7 @@ class PurchaseNoteService
             }
 
             // The lines may already be billed from a manual daily price.
-            $lines = $tandaTerima->orderItems()->get(['order_id', 'supplier_id']);
+            $lines = $tandaTerima->orderItems()->get(['order_items.id', 'order_id', 'supplier_id']);
 
             if ($this->billing->hasFinalBilling($lines)) {
                 throw ValidationException::withMessages(['note' => self::BILLED_MESSAGE]);
@@ -189,6 +189,12 @@ class PurchaseNoteService
                 $this->applyDryLines($note, $data['items'], $user);
             } else {
                 $this->billing->voidDrafts($note->suratJalan->orderItems()->get(['order_id', 'supplier_id']));
+
+                // Undo this nota's prices: a line the correction reports as
+                // undelivered must not keep a price it no longer has a nota for.
+                OrderItem::whereIn('id', $note->items()->where('qty', '>', 0)->whereNotNull('order_item_id')->select('order_item_id'))
+                    ->update(['final_cost_price' => null, 'final_selling_price' => null]);
+
                 $note->items()->delete();
                 $this->applyWetLines($note, $note->suratJalan, $data['items'], $user);
             }
@@ -215,7 +221,7 @@ class PurchaseNoteService
             return $consumed ? 'Stok dari nota ini sudah terpakai untuk pengiriman, nota tidak bisa dikoreksi lagi.' : null;
         }
 
-        $orderItems = OrderItem::whereIn('id', $note->items()->pluck('order_item_id')->filter())->get(['order_id', 'supplier_id']);
+        $orderItems = OrderItem::whereIn('id', $note->items()->pluck('order_item_id')->filter())->get(['id', 'order_id', 'supplier_id']);
 
         return $this->billing->hasFinalBilling($orderItems) ? self::BILLED_MESSAGE : null;
     }
@@ -291,17 +297,18 @@ class PurchaseNoteService
             $total += (float) $noteItem->subtotal;
             $hasDiscrepancy = $hasDiscrepancy || round((float) $noteItem->qty, 2) !== round((float) $orderItem->qty_ordered, 2);
 
+            // An undelivered line says nothing about its price or the market's:
+            // a price of 0 would bill any quantity the Dapur did receive at 0.
+            if ($qty <= 0) {
+                continue;
+            }
+
             $sellingPrice = round($item->calculateSellingPrice($unitPrice), 2);
 
             $orderItem->update([
                 'final_cost_price' => $unitPrice,
                 'final_selling_price' => $sellingPrice,
             ]);
-
-            // An undelivered line says nothing about the market price.
-            if ($qty <= 0) {
-                continue;
-            }
 
             DailyPrice::updateOrCreate(
                 ['item_id' => $item->id, 'date' => $note->note_date->toDateString()],

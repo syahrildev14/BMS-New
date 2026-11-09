@@ -40,13 +40,19 @@
                     <td>{{ $item->item->name }}</td>
                     <td>{{ \App\Support\Format::qty($item->qty_received) }} {{ $item->item->satuan->name }}</td>
                     <td>{{ \App\Support\Format::rupiah($item->final_selling_price) }}</td>
-                    <td class="text-right">{{ \App\Support\Format::rupiah($item->qty_received * $item->final_selling_price) }}</td>
+                    <td class="text-right">{{ \App\Support\Format::rupiah(((float) $item->qty_received - (float) $item->qty_rejected) * (float) $item->final_selling_price) }}</td>
                 </tr>
             @endforeach
         </tbody>
     </table>
 
     <table class="totals">
+        @foreach ($paidInvoices as $paidInvoice)
+            <tr>
+                <td class="text-right">Sudah Dibayar ({{ $paidInvoice->invoice_number }})</td>
+                <td class="text-right" style="width: 150px;">-{{ \App\Support\Format::rupiah($paidInvoice->total_amount) }}</td>
+            </tr>
+        @endforeach
         <tr>
             <td class="text-right"><strong>Total Invoice</strong></td>
             <td class="text-right" style="width: 150px;">{{ \App\Support\Format::rupiah($invoice->total_amount) }}</td>
