@@ -23,8 +23,8 @@ use Illuminate\Validation\ValidationException;
  *
  *  - Dry nota: goods bought directly (e.g. Saturday shopping) go into Gudang
  *    as a new FIFO lot priced at the nota price.
- *  - Wet nota: one per Tanda Terima (Supplier + Dapur + day). Its unit
- *    prices become the cost price of exactly those order lines, so two
+ *  - Wet nota: one per Supplier on a Tanda Terima (Dapur + day). Its unit
+ *    prices become the cost price of exactly that supplier's lines, so two
  *    Dapur can be billed different prices for the same item on the same day.
  *    Daily price + item master are bumped to the latest nota price as the
  *    estimate reference for the next order.
@@ -114,21 +114,25 @@ class PurchaseNoteService
     /**
      * @param  array{reference_number?: ?string, notes?: ?string, items: array<int, array{order_item_id: int, qty: float|string, unit_price: float|string}>}  $data
      */
-    public function createWetNote(SuratJalan $tandaTerima, array $data, User $user): PurchaseNote
+    public function createWetNote(SuratJalan $tandaTerima, int $supplierId, array $data, User $user): PurchaseNote
     {
-        return DB::transaction(function () use ($tandaTerima, $data, $user) {
+        return DB::transaction(function () use ($tandaTerima, $supplierId, $data, $user) {
             $tandaTerima = SuratJalan::whereKey($tandaTerima->id)->lockForUpdate()->firstOrFail();
 
             if ($tandaTerima->document_type !== SuratJalan::TANDA_TERIMA) {
                 throw ValidationException::withMessages(['surat_jalan_id' => 'Nota basah hanya bisa dibuat dari Tanda Terima bahan basah.']);
             }
 
-            if (PurchaseNote::where('surat_jalan_id', $tandaTerima->id)->exists()) {
-                throw ValidationException::withMessages(['surat_jalan_id' => "Tanda Terima {$tandaTerima->sj_number} sudah punya nota."]);
+            if (PurchaseNote::where('surat_jalan_id', $tandaTerima->id)->where('supplier_id', $supplierId)->exists()) {
+                throw ValidationException::withMessages(['surat_jalan_id' => "Tanda Terima {$tandaTerima->sj_number} sudah punya nota untuk supplier ini."]);
             }
 
             // The lines may already be billed from a manual daily price.
-            $lines = $tandaTerima->orderItems()->get(['order_items.id', 'order_id', 'supplier_id']);
+            $lines = $tandaTerima->orderItems()->where('supplier_id', $supplierId)->get(['order_items.id', 'order_id', 'supplier_id']);
+
+            if ($lines->isEmpty()) {
+                throw ValidationException::withMessages(['surat_jalan_id' => "Supplier ini tidak punya barang di Tanda Terima {$tandaTerima->sj_number}."]);
+            }
 
             if ($this->billing->hasFinalBilling($lines)) {
                 throw ValidationException::withMessages(['note' => self::BILLED_MESSAGE]);
@@ -138,7 +142,7 @@ class PurchaseNoteService
 
             $note = $this->createWithUniqueNumber([
                 'category' => 'WET_GOODS',
-                'supplier_id' => $tandaTerima->supplier_id,
+                'supplier_id' => $supplierId,
                 'surat_jalan_id' => $tandaTerima->id,
                 'dapur_id' => $tandaTerima->dapur_id,
                 'note_date' => $tandaTerima->shipment_date->toDateString(),
@@ -188,7 +192,7 @@ class PurchaseNoteService
 
                 $this->applyDryLines($note, $data['items'], $user);
             } else {
-                $this->billing->voidDrafts($note->suratJalan->orderItems()->get(['order_id', 'supplier_id']));
+                $this->billing->voidDrafts($note->suratJalan->orderItems()->where('supplier_id', $note->supplier_id)->get(['order_id', 'supplier_id']));
 
                 // Undo this nota's prices: a line the correction reports as
                 // undelivered must not keep a price it no longer has a nota for.
@@ -265,18 +269,18 @@ class PurchaseNoteService
     }
 
     /**
-     * Every line of the Tanda Terima must be present exactly once — the nota
-     * is checked line by line against what was ordered.
+     * Every line of the nota's supplier on the Tanda Terima must be present
+     * exactly once — the nota is checked line by line against what was ordered.
      *
      * @param  array<int, array{order_item_id: int, qty: float|string, unit_price: float|string}>  $lines
      */
     private function applyWetLines(PurchaseNote $note, SuratJalan $tandaTerima, array $lines, User $user): void
     {
-        $orderItems = $tandaTerima->orderItems()->with('item')->lockForUpdate()->get()->keyBy('id');
+        $orderItems = $tandaTerima->orderItems()->where('supplier_id', $note->supplier_id)->with('item')->lockForUpdate()->get()->keyBy('id');
         $submittedIds = collect($lines)->pluck('order_item_id')->map(fn ($id) => (int) $id);
 
         if ($submittedIds->duplicates()->isNotEmpty() || $submittedIds->sort()->values()->all() !== $orderItems->keys()->sort()->values()->all()) {
-            throw ValidationException::withMessages(['items' => "Isi nota harus mencakup tepat semua barang di Tanda Terima {$tandaTerima->sj_number}."]);
+            throw ValidationException::withMessages(['items' => "Isi nota harus mencakup tepat semua barang supplier ini di Tanda Terima {$tandaTerima->sj_number}."]);
         }
 
         $total = 0.0;

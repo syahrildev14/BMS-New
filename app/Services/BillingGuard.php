@@ -105,15 +105,15 @@ class BillingGuard
     }
 
     /**
-     * Crosscheck H+1: every per-supplier document under this Order must be
+     * Crosscheck H+1: every delivery document under this Order must be
      * VERIFIED. Takes the document row lock DeliveryVerificationService uses,
-     * so billing and a reopen can't interleave. Legacy documents (no
-     * supplier_id) predate the crosscheck and are exempt.
+     * so billing and a reopen can't interleave. Legacy documents (with an
+     * order_id) predate the crosscheck and are exempt.
      */
     public function assertDocumentsVerified(Order $order): void
     {
         $unverified = SuratJalan::whereIn('id', $order->orderItems()->whereNotNull('surat_jalan_id')->select('surat_jalan_id'))
-            ->whereNotNull('supplier_id')
+            ->crosscheckable()
             ->lockForUpdate()
             ->get()
             ->where('verification_status', '!=', SuratJalan::VERIFICATION_VERIFIED)

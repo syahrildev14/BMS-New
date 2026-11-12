@@ -10,7 +10,6 @@ use App\Models\Gudang;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\StockLot;
-use App\Models\Supplier;
 use App\Models\SuratJalan;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -108,8 +107,9 @@ class DeliveryNoteService
     }
 
     /**
-     * Issue one delivery document per supplier (or only for $supplierId) for
-     * the Dapur's pending lines (see pendingGroups() for which lines).
+     * Issue ONE delivery document for the Dapur's pending lines of every
+     * supplier (see pendingGroups() for which lines): one Surat Jalan / one
+     * Tanda Terima per Dapur per shipment date, not one per supplier.
      * DRY_GOODS lines are gated on Gudang stock (FIFO): a line the stock
      * cannot fully cover is held back (stays surat_jalan_id NULL) until it is
      * bought (Nota Pembelian) — it shows up on Purchasing's Daftar Belanja.
@@ -117,13 +117,13 @@ class DeliveryNoteService
      * @param  array{document_template_id?: ?int, armada_id?: ?int, driver_id?: ?int}  $options
      * @return array{documents: Collection<int, SuratJalan>, held_items: Collection<int, OrderItem>}
      */
-    public function generateDocuments(int $dapurId, string $documentType, string $date, int $userId, ?int $supplierId = null, array $options = []): array
+    public function generateDocuments(int $dapurId, string $documentType, string $date, int $userId, array $options = []): array
     {
         if (! in_array($documentType, [SuratJalan::SURAT_JALAN, SuratJalan::TANDA_TERIMA], true)) {
             throw new \InvalidArgumentException("Jenis dokumen tidak dikenal: {$documentType}.");
         }
 
-        $result = DB::transaction(function () use ($dapurId, $documentType, $date, $userId, $supplierId, $options) {
+        $result = DB::transaction(function () use ($dapurId, $documentType, $date, $userId, $options) {
             // Serializes all document generation for this Dapur, which is what
             // keeps PRIMARY/ADDON and the daily number sequence correct under
             // concurrent requests. Must stay the first query: a plain read
@@ -147,9 +147,8 @@ class DeliveryNoteService
                 ->pluck('id');
 
             $candidates = $candidates->whereIn('order_id', $openOrderIds)->values();
-            $isRequested = fn (OrderItem $line) => $supplierId === null || (int) $line->supplier_id === $supplierId;
 
-            $toAssign = $candidates->filter($isRequested)->values();
+            $toAssign = $candidates;
             $heldItems = collect();
             $gudang = null;
 
@@ -160,28 +159,20 @@ class DeliveryNoteService
             if ($documentType === SuratJalan::SURAT_JALAN) {
                 // Stock is judged across ALL Orders in this shipment at once
                 // (earliest delivery first) — per-Order checks would let two
-                // Orders each believe the same stock is theirs. Every supplier
-                // takes part even when generating for one, so lines of other
-                // suppliers keep their claim on stock for earlier deliveries.
+                // Orders each believe the same stock is theirs.
                 $gudang = Gudang::query()->firstOrFail();
                 $partition = $this->partitionByStock($candidates, $gudang->id);
-                $toAssign = $partition['sufficient']->filter($isRequested)->values();
-                $heldItems = $partition['insufficient']->filter($isRequested)->values();
+                $toAssign = $partition['sufficient']->values();
+                $heldItems = $partition['insufficient']->values();
             }
 
             $documents = collect();
 
-            foreach ($toAssign->groupBy('supplier_id') as $lines) {
-                $document = $this->createDocumentWithUniqueNumber(
-                    $dapur,
-                    $lines->first()->supplier,
-                    $documentType,
-                    $date,
-                    $userId,
-                    $templateAttributes,
-                );
+            // Everything held back for stock: nothing to put on a document.
+            if ($toAssign->isNotEmpty()) {
+                $document = $this->createDocumentWithUniqueNumber($dapur, $documentType, $date, $userId, $templateAttributes);
 
-                foreach ($lines as $orderItem) {
+                foreach ($toAssign as $orderItem) {
                     $this->attachToDocument($orderItem, $document, $user, $gudang);
                 }
 
@@ -282,20 +273,21 @@ class DeliveryNoteService
     }
 
     /**
-     * SJ/{YYYYMMDD}/{DAPUR}/{SUPP}/{nn} or TT/..., where nn is a daily
-     * sequence (Jakarta date) per (Dapur, document type). Generation holds the
-     * Dapur row lock, so this only retries on a stray duplicate key.
-     * The first document for a (Dapur, Supplier, type, shipment date) is
-     * PRIMARY; any later one for the same combination is an ADDON.
+     * SJ/{YYYYMMDD}/{DAPUR}/{nn} or TT/..., where nn is a daily sequence
+     * (Jakarta date) per (Dapur, document type). Generation holds the Dapur
+     * row lock, so this only retries on a stray duplicate key.
+     * The first document for a (Dapur, type, shipment date) is PRIMARY; any
+     * later one for the same combination is an ADDON. The document covers
+     * every supplier, so supplier_id stays NULL (suppliers are per line).
      *
      * @param  array<string, int|string>  $templateAttributes
      */
-    private function createDocumentWithUniqueNumber(Dapur $dapur, Supplier $supplier, string $documentType, string $date, int $userId, array $templateAttributes): SuratJalan
+    private function createDocumentWithUniqueNumber(Dapur $dapur, string $documentType, string $date, int $userId, array $templateAttributes): SuratJalan
     {
         $prefix = $documentType === SuratJalan::SURAT_JALAN ? 'SJ' : 'TT';
 
         $sameShipmentCount = SuratJalan::where('dapur_id', $dapur->id)
-            ->where('supplier_id', $supplier->id)
+            ->whereNull('order_id')
             ->where('document_type', $documentType)
             ->whereDate('shipment_date', $date)
             ->count();
@@ -308,10 +300,10 @@ class DeliveryNoteService
 
             try {
                 return SuratJalan::create($templateAttributes + [
-                    'sj_number' => sprintf('%s%s/%02d', $datePrefix, $supplier->code, $dailySequence),
+                    'sj_number' => sprintf('%s%02d', $datePrefix, $dailySequence),
                     'document_type' => $documentType,
                     'dapur_id' => $dapur->id,
-                    'supplier_id' => $supplier->id,
+                    'supplier_id' => null,
                     'shipment_date' => $date,
                     'type' => $sameShipmentCount === 0 ? 'PRIMARY' : 'ADDON',
                     'sequence_number' => $sameShipmentCount + 1,

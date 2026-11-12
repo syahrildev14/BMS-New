@@ -19,21 +19,30 @@ interface SttLine {
   rejection_reason: string;
 }
 
-// Dapur only chooses item + qty — supplier and price are filled in by the
-// server from the item master.
+// Dapur chooses item, qty and supplier (pre-filled with the item's default
+// supplier). Price is filled in by the server from the item master.
 interface NewItemLine {
   key: number;
   item_id: string;
+  supplier_id: string;
   qty_ordered: string;
 }
 
 let nextNewItemKey = 1;
 
 function emptyNewItemLine(): NewItemLine {
-  return { key: nextNewItemKey++, item_id: '', qty_ordered: '' };
+  return { key: nextNewItemKey++, item_id: '', supplier_id: '', qty_ordered: '' };
 }
 
-export default function DapurOrdersShow({ order, items }: { order: Order; items: Item[] }) {
+export default function DapurOrdersShow({
+  order,
+  items,
+  suppliers,
+}: {
+  order: Order;
+  items: Item[];
+  suppliers: { id: number; name: string }[];
+}) {
   // Lines on a document the koperasi already verified are locked (enforced
   // server-side too; this is the matching UI state).
   const verifiedDocumentIds = new Set((order.surat_jalans ?? []).filter((doc) => doc.verification_status === 'VERIFIED').map((doc) => doc.id));
@@ -79,6 +88,7 @@ export default function DapurOrdersShow({ order, items }: { order: Order; items:
       .filter((line) => line.item_id && line.qty_ordered)
       .map((line) => ({
         item_id: Number(line.item_id),
+        supplier_id: line.supplier_id ? Number(line.supplier_id) : null,
         qty_ordered: Number(line.qty_ordered),
       }));
 
@@ -214,6 +224,7 @@ export default function DapurOrdersShow({ order, items }: { order: Order; items:
             <TableHeader>
               <TableRow>
                 <TableHead>Item</TableHead>
+                <TableHead>Supplier</TableHead>
                 <TableHead>Qty Pesan</TableHead>
                 <TableHead>Qty Terima</TableHead>
                 <TableHead>Qty Reject</TableHead>
@@ -232,6 +243,7 @@ export default function DapurOrdersShow({ order, items }: { order: Order; items:
                 return (
                   <TableRow key={orderItem.id}>
                     <TableCell className="font-medium">{orderItem.item?.name}</TableCell>
+                    <TableCell>{orderItem.supplier?.name ?? '—'}</TableCell>
                     <TableCell>
                       {noSjYet ? (
                         <Input
@@ -420,18 +432,35 @@ export default function DapurOrdersShow({ order, items }: { order: Order; items:
 
               return (
                 <div key={line.key} className="grid grid-cols-12 items-end gap-2 border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
-                  <div className="col-span-7 flex flex-col gap-1">
+                  <div className="col-span-12 flex flex-col gap-1 sm:col-span-5">
                     <label className="text-xs font-medium text-gray-700">Item</label>
                     <Combobox
                       value={line.item_id}
-                      onValueChange={(v) => updateNewLine(line.key, { item_id: v })}
+                      onValueChange={(v) => {
+                        const picked = items.find((i) => String(i.id) === v);
+                        updateNewLine(line.key, {
+                          item_id: v,
+                          supplier_id: picked?.default_supplier_id ? String(picked.default_supplier_id) : line.supplier_id,
+                        });
+                      }}
                       placeholder="Ketik untuk cari item..."
                       emptyText="Item tidak ditemukan."
                       options={items.map((item) => ({ value: String(item.id), label: `${item.name} (${item.satuan?.name})` }))}
                     />
                   </div>
 
-                  <div className="col-span-4 flex flex-col gap-1">
+                  <div className="col-span-12 flex flex-col gap-1 sm:col-span-4">
+                    <label className="text-xs font-medium text-gray-700">Supplier</label>
+                    <Combobox
+                      value={line.supplier_id}
+                      onValueChange={(v) => updateNewLine(line.key, { supplier_id: v })}
+                      placeholder="Pilih supplier..."
+                      emptyText="Supplier tidak ditemukan."
+                      options={suppliers.map((supplier) => ({ value: String(supplier.id), label: supplier.name }))}
+                    />
+                  </div>
+
+                  <div className="col-span-10 flex flex-col gap-1 sm:col-span-2">
                     <label className="text-xs font-medium text-gray-700">Qty {selectedItem ? `(${selectedItem.satuan?.name})` : ''}</label>
                     <Input
                       type="number"
@@ -442,7 +471,7 @@ export default function DapurOrdersShow({ order, items }: { order: Order; items:
                     />
                   </div>
 
-                  <div className="col-span-1 flex justify-end">
+                  <div className="col-span-2 flex justify-end sm:col-span-1">
                     <Button
                       type="button"
                       variant="ghost"

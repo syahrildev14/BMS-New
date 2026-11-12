@@ -24,7 +24,7 @@ class GenerateSuratJalanPdfJob implements ShouldQueue
 
     public function handle(DocumentRenderService $renderer): void
     {
-        $suratJalan = SuratJalan::with(['dapur', 'supplier', 'order.dapur', 'orderItems.item.satuan', 'orderItems.order', 'documentTemplate'])
+        $suratJalan = SuratJalan::with(['dapur', 'supplier', 'order.dapur', 'orderItems.item.satuan', 'orderItems.order', 'orderItems.supplier', 'documentTemplate'])
             ->findOrFail($this->suratJalanId);
 
         $content = $suratJalan->documentTemplate

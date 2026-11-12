@@ -7,6 +7,7 @@ use App\Models\BankAccount;
 use App\Models\DocumentTemplate;
 use App\Models\Invoice;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Services\SplitInvoiceService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -45,12 +46,41 @@ class InvoiceController extends Controller
 
     public function byDate(string $date): Response
     {
+        $invoices = Invoice::with(['order.orderItems.item.satuan', 'dapur', 'supplier'])
+            ->whereHas('order', fn ($query) => $query->whereDate('delivery_date', $date))
+            ->latest()
+            ->get();
+
+        // Same lines the invoice bills (see DocumentDataBuilder::forInvoice):
+        // the (order, supplier) lines that have an STT result.
+        $invoices->each(function (Invoice $invoice) {
+            $lines = $invoice->order->orderItems
+                ->where('supplier_id', $invoice->supplier_id)
+                ->whereNotNull('qty_received')
+                ->values();
+
+            $invoice->setAttribute('item_count', $lines->count());
+            $invoice->setAttribute('lines', $lines->map(function (OrderItem $line) {
+                $qtyAccepted = max(0, round((float) $line->qty_received - (float) $line->qty_rejected, 2));
+
+                return [
+                    'id' => $line->id,
+                    'item_name' => $line->item->name,
+                    'satuan' => $line->item->satuan?->name,
+                    'qty_ordered' => (float) $line->qty_ordered,
+                    'qty_received' => (float) $line->qty_received,
+                    'qty_rejected' => (float) $line->qty_rejected,
+                    'qty_accepted' => $qtyAccepted,
+                    'unit_price' => $line->final_selling_price === null ? null : (float) $line->final_selling_price,
+                    'subtotal' => round($qtyAccepted * (float) $line->final_selling_price, 2),
+                ];
+            })->all());
+            $invoice->order->unsetRelation('orderItems');
+        });
+
         return Inertia::render('finance/invoices/show', [
             'date' => $date,
-            'invoices' => Invoice::with(['order', 'dapur', 'supplier'])
-                ->whereHas('order', fn ($query) => $query->whereDate('delivery_date', $date))
-                ->latest()
-                ->get(),
+            'invoices' => $invoices,
         ]);
     }
 

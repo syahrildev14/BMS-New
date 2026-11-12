@@ -25,20 +25,22 @@ class StoreOrderRequest extends FormRequest
     }
 
     /**
-     * Dapur only picks the item and quantity — supplier and price are the
-     * koperasi's call, filled in server-side from the item master (see
-     * OrderController::resolveOrderLines()). Shared with
+     * Dapur picks the item, quantity and supplier; an empty supplier falls
+     * back to the item's default supplier. Price stays the koperasi's call
+     * (see OrderController::resolveOrderLines()). Shared with
      * OrderController::addItems() so both entry points validate the same way.
      *
      * @return array<string, mixed>
      */
     public static function itemLineRules(): array
     {
+        $request = request();
+
         return [
             'items' => ['required', 'array', 'min:1'],
             'items.*.item_id' => [
                 'bail', 'required', 'integer',
-                function (string $attribute, mixed $value, \Closure $fail): void {
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
                     $item = Item::find($value);
 
                     if (! $item || ! $item->is_active) {
@@ -47,11 +49,14 @@ class StoreOrderRequest extends FormRequest
                         return;
                     }
 
-                    if (! $item->default_supplier_id) {
-                        $fail("Barang {$item->name} belum punya supplier default, hubungi koperasi.");
+                    $index = (int) explode('.', $attribute)[1];
+
+                    if (! $item->default_supplier_id && ! $request->input("items.{$index}.supplier_id")) {
+                        $fail("Pilih supplier untuk barang {$item->name}.");
                     }
                 },
             ],
+            'items.*.supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
             'items.*.qty_ordered' => ['required', 'numeric', 'min:0.01', 'max:99999999.99'],
         ];
     }

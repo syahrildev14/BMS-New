@@ -10,6 +10,7 @@ use App\Models\DeliveryDocumentPhoto;
 use App\Models\Item;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Supplier;
 use App\Models\SuratJalan;
 use App\Services\DeliveryNoteService;
 use App\Services\DeliveryVerificationService;
@@ -48,19 +49,27 @@ class OrderController extends Controller
     {
         return Inertia::render('dapur/orders/create', [
             'items' => $this->orderableItems(),
+            'suppliers' => $this->supplierOptions(),
         ]);
     }
 
     /**
-     * Catalog for Dapur forms: only what they choose from. Cost, margin and
-     * supplier are the koperasi's and must not reach the Dapur's browser.
+     * Catalog for Dapur forms: only what they choose from. Cost and margin
+     * are the koperasi's and must not reach the Dapur's browser; the default
+     * supplier is sent to pre-fill the supplier picker.
      */
     private function orderableItems(): Collection
     {
         return Item::with('satuan:id,name')
             ->where('is_active', true)
             ->orderBy('name')
-            ->get(['id', 'name', 'satuan_id']);
+            ->get(['id', 'name', 'satuan_id', 'default_supplier_id']);
+    }
+
+    /** Suppliers a Dapur may pick per order line (names only). */
+    private function supplierOptions(): Collection
+    {
+        return Supplier::orderBy('name')->get(['id', 'name']);
     }
 
     public function store(StoreOrderRequest $request, RevisionGateService $revisionGate): RedirectResponse
@@ -93,6 +102,7 @@ class OrderController extends Controller
 
         $order->load([
             'orderItems.item:id,name,satuan_id',
+            'orderItems.supplier:id,name',
             'suratJalans' => fn ($query) => $query->with(['supplier:id,name', 'photos'])->orderBy('surat_jalans.id'),
         ]);
         $order->orderItems->makeHidden('final_cost_price');
@@ -100,6 +110,7 @@ class OrderController extends Controller
         return Inertia::render('dapur/orders/show', [
             'order' => $order,
             'items' => $this->orderableItems(),
+            'suppliers' => $this->supplierOptions(),
         ]);
     }
 
@@ -344,12 +355,12 @@ class OrderController extends Controller
     }
 
     /**
-     * Fills supplier_id and estimated_price from the item master — Dapur
-     * only submits item + qty; anything else the client sends is ignored.
+     * Uses the supplier the Dapur picked, falling back to the item's default
+     * supplier; estimated_price always comes from the item master.
      * Validation (StoreOrderRequest::itemLineRules) already guarantees each
-     * item is active and has a default_supplier_id.
+     * item is active and ends up with a supplier.
      *
-     * @param  array<int, array{item_id: int, qty_ordered: float|string}>  $lines
+     * @param  array<int, array{item_id: int, qty_ordered: float|string, supplier_id?: int|string|null}>  $lines
      * @return array<int, array{item_id: int, supplier_id: int, qty_ordered: float, estimated_price: float}>
      */
     private function resolveOrderLines(array $lines): array
@@ -361,7 +372,7 @@ class OrderController extends Controller
 
             return [
                 'item_id' => $item->id,
-                'supplier_id' => $item->default_supplier_id,
+                'supplier_id' => empty($line['supplier_id']) ? $item->default_supplier_id : (int) $line['supplier_id'],
                 'qty_ordered' => (float) $line['qty_ordered'],
                 'estimated_price' => (float) ($item->base_selling_price ?? 0),
             ];

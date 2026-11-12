@@ -20,7 +20,7 @@ class DocumentDataBuilder
      */
     public function forDeliveryDocument(SuratJalan $document): array
     {
-        $document->loadMissing(['dapur', 'order.dapur', 'orderItems.item.satuan', 'orderItems.order']);
+        $document->loadMissing(['dapur', 'supplier', 'order.dapur', 'orderItems.item.satuan', 'orderItems.order', 'orderItems.supplier']);
 
         $dapur = $document->dapur ?? $document->order?->dapur;
         $lines = $document->orderItems->sortBy(fn (OrderItem $line) => [$line->order->delivery_date, $line->id])->values();
@@ -33,6 +33,7 @@ class DocumentDataBuilder
                 'sppg_name' => (string) $dapur?->name,
                 'tanggal' => $this->date($document->shipment_date ?? $document->order?->delivery_date),
                 'no_po' => $lines->pluck('order.order_number')->unique()->implode(', '),
+                'supplier_name' => (string) ($document->supplier?->name ?? $lines->pluck('supplier.name')->filter()->unique()->sort()->implode(', ')),
                 'armada_name' => (string) $document->armada_name,
                 'no_pol' => (string) $document->plate_number,
                 'driver_name' => (string) $document->driver_name,
@@ -42,6 +43,7 @@ class DocumentDataBuilder
                 'item_nama_barang' => $line->item->name,
                 'item_qty' => Format::qty($line->qty_ordered),
                 'item_satuan' => (string) $line->item->satuan?->name,
+                'item_supplier' => (string) $line->supplier?->name,
                 'item_keterangan' => $line->order->order_number.' ('.$line->order->delivery_date->format('d-m-Y').')',
             ])->all(),
         ];

@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { type FormEventHandler, type ReactElement, useState } from 'react';
+import { Fragment, type FormEventHandler, type ReactElement, useState } from 'react';
 import { AppLayout } from '@/layouts/AppLayout';
 import { PageHeader } from '@/shared/components/layout/PageHeader';
 import { Badge, type BadgeProps } from '@/shared/components/ui/badge';
@@ -9,7 +9,7 @@ import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table';
 import { errorAlert, successAlert } from '@/shared/lib/alerts';
-import { formatRupiah } from '@/shared/lib/format';
+import { formatQty, formatRupiah } from '@/shared/lib/format';
 import type { Invoice } from '@/shared/types/prd.type';
 import type { SharedData } from '@/types';
 
@@ -21,10 +21,25 @@ const STATUS_VARIANT: Record<string, BadgeProps['variant']> = {
   VOID: 'outline',
 };
 
-export default function FinanceInvoicesShow({ date, invoices }: { date: string; invoices: Invoice[] }) {
+interface InvoiceLine {
+  id: number;
+  item_name: string;
+  satuan: string | null;
+  qty_ordered: number;
+  qty_received: number;
+  qty_rejected: number;
+  qty_accepted: number;
+  unit_price: number | null;
+  subtotal: number;
+}
+
+type InvoiceRow = Invoice & { item_count: number; lines: InvoiceLine[] };
+
+export default function FinanceInvoicesShow({ date, invoices }: { date: string; invoices: InvoiceRow[] }) {
   const { auth } = usePage<SharedData>().props;
   const canApprove = auth.permissions.includes('invoices.approve');
   const [processingId, setProcessingId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
@@ -90,6 +105,7 @@ export default function FinanceInvoicesShow({ date, invoices }: { date: string; 
             <TableHead>Order</TableHead>
             <TableHead>Dapur</TableHead>
             <TableHead>Supplier</TableHead>
+            <TableHead>Jumlah Item</TableHead>
             <TableHead>Total</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Jatuh Tempo</TableHead>
@@ -100,17 +116,27 @@ export default function FinanceInvoicesShow({ date, invoices }: { date: string; 
         <TableBody>
           {invoices.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={9} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={10} className="h-32 text-center text-gray-400">
                 Tidak ada invoice pada tanggal ini.
               </TableCell>
             </TableRow>
           ) : (
             invoices.map((invoice) => (
-              <TableRow key={invoice.id}>
+              <Fragment key={invoice.id}>
+              <TableRow>
                 <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
                 <TableCell>{invoice.order?.order_number}</TableCell>
                 <TableCell>{invoice.dapur?.name}</TableCell>
                 <TableCell>{invoice.supplier?.name}</TableCell>
+                <TableCell>
+                  <button
+                    type="button"
+                    className="text-sm font-medium text-primary-text hover:underline"
+                    onClick={() => setExpandedId(expandedId === invoice.id ? null : invoice.id)}
+                  >
+                    {invoice.item_count} item {expandedId === invoice.id ? '▲' : '▼'}
+                  </button>
+                </TableCell>
                 <TableCell>{formatRupiah(invoice.total_amount)}</TableCell>
                 <TableCell>
                   <Badge variant={STATUS_VARIANT[invoice.status]}>{invoice.status}</Badge>
@@ -161,6 +187,45 @@ export default function FinanceInvoicesShow({ date, invoices }: { date: string; 
                   </div>
                 </TableCell>
               </TableRow>
+              {expandedId === invoice.id && (
+                <TableRow className="bg-gray-50 hover:bg-gray-50">
+                  <TableCell colSpan={10} className="p-3">
+                    {invoice.lines.length === 0 ? (
+                      <p className="text-sm text-gray-400">Belum ada barang dengan hasil STT.</p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Barang</TableHead>
+                            <TableHead className="text-right">Qty Pesan</TableHead>
+                            <TableHead className="text-right">Qty Diterima</TableHead>
+                            <TableHead className="text-right">Qty Ditolak</TableHead>
+                            <TableHead className="text-right">Qty Ditagih</TableHead>
+                            <TableHead className="text-right">Harga Satuan</TableHead>
+                            <TableHead className="text-right">Subtotal</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {invoice.lines.map((line) => (
+                            <TableRow key={line.id}>
+                              <TableCell>{line.item_name}</TableCell>
+                              <TableCell className="text-right">
+                                {formatQty(line.qty_ordered)} {line.satuan}
+                              </TableCell>
+                              <TableCell className="text-right">{formatQty(line.qty_received)}</TableCell>
+                              <TableCell className={`text-right ${line.qty_rejected > 0 ? 'text-red-600' : ''}`}>{formatQty(line.qty_rejected)}</TableCell>
+                              <TableCell className="text-right font-medium">{formatQty(line.qty_accepted)}</TableCell>
+                              <TableCell className="text-right">{line.unit_price === null ? '—' : formatRupiah(line.unit_price)}</TableCell>
+                              <TableCell className="text-right">{formatRupiah(line.subtotal)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </TableCell>
+                </TableRow>
+              )}
+              </Fragment>
             ))
           )}
         </TableBody>

@@ -19,8 +19,8 @@ final class DocumentPlaceholders
     ];
 
     private const OPTIONAL = [
-        DocumentTemplate::SURAT_JALAN => ['item_keterangan', 'sppg_name', 'tanggal', 'no_po', 'armada_name', 'no_pol', 'driver_name'],
-        DocumentTemplate::TANDA_TERIMA => ['item_keterangan', 'sppg_name', 'tanggal', 'no_po', 'nomor_tanda_terima'],
+        DocumentTemplate::SURAT_JALAN => ['item_keterangan', 'item_supplier', 'supplier_name', 'sppg_name', 'tanggal', 'no_po', 'armada_name', 'no_pol', 'driver_name'],
+        DocumentTemplate::TANDA_TERIMA => ['item_keterangan', 'item_supplier', 'supplier_name', 'sppg_name', 'tanggal', 'no_po', 'nomor_tanda_terima'],
         DocumentTemplate::INVOICE => ['sppg_name', 'phone', 'address', 'po_number', 'delivery_date', 'invoice_date', 'bank_name', 'bank_account', 'bank_owner', 'total_barang', 'sudah_dibayar'],
     ];
 

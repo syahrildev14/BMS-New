@@ -16,7 +16,7 @@ beforeEach(function () {
     $this->service = app(DeliveryNoteService::class);
 });
 
-it('combines dry goods from several daily Orders of one Dapur into one Surat Jalan per supplier', function () {
+it('combines dry goods of every supplier from several daily Orders of one Dapur into one Surat Jalan', function () {
     $kopMerahPutih = makeSupplier(['code' => 'KMP']);
     $supplierB = makeSupplier(['code' => 'SUPB']);
     $beras = makeItem(['category' => 'DRY_GOODS', 'default_supplier_id' => $kopMerahPutih->id]);
@@ -32,21 +32,22 @@ it('combines dry goods from several daily Orders of one Dapur into one Surat Jal
 
     $result = $this->service->generateDocuments($this->dapur->id, SuratJalan::SURAT_JALAN, '2030-01-15', $this->opsUser->id);
 
-    expect($result['documents'])->toHaveCount(2);
+    expect($result['documents'])->toHaveCount(1);
 
-    $sjKmp = $result['documents']->firstWhere('supplier_id', $kopMerahPutih->id);
-    expect($sjKmp->document_type)->toBe(SuratJalan::SURAT_JALAN);
-    expect($sjKmp->dapur_id)->toBe($this->dapur->id);
-    expect($sjKmp->sj_number)->toStartWith('SJ/')->toContain('/DPR-A/KMP/');
-    expect($lineSeninBeras->fresh()->surat_jalan_id)->toBe($sjKmp->id);
-    expect($lineSelasaBeras->fresh()->surat_jalan_id)->toBe($sjKmp->id);
-    expect($lineSelasaGula->fresh()->surat_jalan_id)->not->toBe($sjKmp->id)->not->toBeNull();
+    $sj = $result['documents']->first();
+    expect($sj->document_type)->toBe(SuratJalan::SURAT_JALAN);
+    expect($sj->dapur_id)->toBe($this->dapur->id);
+    expect($sj->supplier_id)->toBeNull();
+    expect($sj->sj_number)->toStartWith('SJ/')->toContain('/DPR-A/');
+    expect($lineSeninBeras->fresh()->surat_jalan_id)->toBe($sj->id);
+    expect($lineSelasaBeras->fresh()->surat_jalan_id)->toBe($sj->id);
+    expect($lineSelasaGula->fresh()->surat_jalan_id)->toBe($sj->id);
 
     expect($senin->fresh()->status)->toBe('LOCKED');
     expect($selasa->fresh()->status)->toBe('LOCKED');
-    expect($sjKmp->fresh()->pdf_url)->not->toBeNull();
+    expect($sj->fresh()->pdf_url)->not->toBeNull();
     expect($senin->fresh()->suratJalans)->toHaveCount(1);
-    expect($selasa->fresh()->suratJalans)->toHaveCount(2);
+    expect($selasa->fresh()->suratJalans)->toHaveCount(1);
 });
 
 it('does not include dry goods of Orders delivering after the chosen date', function () {
@@ -75,7 +76,7 @@ it('never puts wet goods on a Surat Jalan', function () {
     expect($line->fresh()->surat_jalan_id)->toBeNull();
 });
 
-it('issues a daily wet-goods Tanda Terima per supplier, only for the chosen delivery date', function () {
+it('issues one daily wet-goods Tanda Terima for every supplier, only for the chosen delivery date', function () {
     $supplierA = makeSupplier(['code' => 'SAYUR']);
     $supplierB = makeSupplier(['code' => 'DAGING']);
     $sayur = makeItem(['category' => 'WET_GOODS', 'default_supplier_id' => $supplierA->id]);
@@ -91,29 +92,14 @@ it('issues a daily wet-goods Tanda Terima per supplier, only for the chosen deli
 
     $result = $this->service->generateDocuments($this->dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->opsUser->id);
 
-    expect($result['documents'])->toHaveCount(2);
-    expect($result['documents']->pluck('document_type')->unique()->all())->toBe([SuratJalan::TANDA_TERIMA]);
-    expect($result['documents']->first()->sj_number)->toStartWith('TT/');
-    expect($lineSayur->fresh()->surat_jalan_id)->not->toBeNull();
-    expect($lineAyam->fresh()->surat_jalan_id)->not->toBeNull();
+    expect($result['documents'])->toHaveCount(1);
+    $tt = $result['documents']->first();
+    expect($tt->document_type)->toBe(SuratJalan::TANDA_TERIMA);
+    expect($tt->sj_number)->toStartWith('TT/');
+    expect($lineSayur->fresh()->surat_jalan_id)->toBe($tt->id);
+    expect($lineAyam->fresh()->surat_jalan_id)->toBe($tt->id);
     expect($lineBeras->fresh()->surat_jalan_id)->toBeNull();
     expect($lineTomorrow->fresh()->surat_jalan_id)->toBeNull();
-});
-
-it('can generate for a single supplier only', function () {
-    $supplierA = makeSupplier();
-    $supplierB = makeSupplier();
-    $sayur = makeItem(['category' => 'WET_GOODS', 'default_supplier_id' => $supplierA->id]);
-    $ayam = makeItem(['category' => 'WET_GOODS', 'default_supplier_id' => $supplierB->id]);
-    $order = makeOrder($this->dapur, ['delivery_date' => '2030-01-15']);
-    $lineA = makeOrderItem($order, $sayur, $supplierA);
-    $lineB = makeOrderItem($order, $ayam, $supplierB);
-
-    $result = $this->service->generateDocuments($this->dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->opsUser->id, $supplierA->id);
-
-    expect($result['documents'])->toHaveCount(1);
-    expect($lineA->fresh()->surat_jalan_id)->not->toBeNull();
-    expect($lineB->fresh()->surat_jalan_id)->toBeNull();
 });
 
 it('holds back dry goods short on stock without drafting a PO, giving the earliest delivery date first claim', function () {

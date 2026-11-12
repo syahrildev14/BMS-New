@@ -21,9 +21,10 @@ use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Ops issues delivery documents per Dapur + Supplier:
+ * Ops issues one delivery document per Dapur per shipment date, covering
+ * every supplier:
  *  - Surat Jalan (dry goods from the koperasi, may span several daily Orders)
- *  - Tanda Terima (wet goods delivered directly by the Supplier, per day)
+ *  - Tanda Terima (wet goods delivered directly by the Suppliers, per day)
  */
 class DeliveryNoteController extends Controller
 {
@@ -83,7 +84,6 @@ class DeliveryNoteController extends Controller
                 $validated['document_type'],
                 $validated['date'],
                 $request->user()->id,
-                isset($validated['supplier_id']) ? (int) $validated['supplier_id'] : null,
                 array_map(
                     fn ($id) => $id === null ? null : (int) $id,
                     array_intersect_key($validated, array_flip(['document_template_id', 'armada_id', 'driver_id'])),

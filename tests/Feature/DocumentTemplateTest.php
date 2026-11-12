@@ -146,14 +146,14 @@ it('fills every placeholder of the real sample formats', function () {
     $store = fn (string $file, string $type) => $service->store('Contoh', $type, new UploadedFile(base_path("docs/{$file}"), $file, null, null, true), $this->admin);
 
     $tandaTerima = $store('Surat Tanda Terima.docx', DocumentTemplate::TANDA_TERIMA);
-    $this->documents->generateDocuments($this->dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->ops->id, null, ['document_template_id' => $tandaTerima->id]);
+    $this->documents->generateDocuments($this->dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->ops->id, ['document_template_id' => $tandaTerima->id]);
     expect($this->converter->xml)->toContain('Cabai &amp; Bawang')->not->toContain('${');
 
     $dry = makeItem(['name' => 'Beras', 'category' => 'DRY_GOODS', 'default_supplier_id' => $this->supplier->id]);
     makeStockLot(makeGudang(), $dry, 10, 1000);
     makeOrderItem($this->order, $dry, $this->supplier, ['qty_ordered' => 2]);
     $suratJalan = $store('Surat Jalan.docx', DocumentTemplate::SURAT_JALAN);
-    $this->documents->generateDocuments($this->dapur->id, SuratJalan::SURAT_JALAN, '2030-01-15', $this->ops->id, null, [
+    $this->documents->generateDocuments($this->dapur->id, SuratJalan::SURAT_JALAN, '2030-01-15', $this->ops->id, [
         'document_template_id' => $suratJalan->id,
         'armada_id' => Armada::create(['name' => 'Truk', 'plate_number' => 'S 1 A'])->id,
         'driver_id' => Driver::create(['name' => 'Budi'])->id,
@@ -177,7 +177,7 @@ it('deletes an unused template but only deactivates a used one', function () {
     Storage::disk('local')->assertMissing($unused->file_path);
 
     $used = storedTemplate($this, DocumentTemplate::TANDA_TERIMA, ['sppg_name'], array_slice(SJ_ROW, 0, 4));
-    $this->documents->generateDocuments($this->dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->ops->id, null, ['document_template_id' => $used->id]);
+    $this->documents->generateDocuments($this->dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->ops->id, ['document_template_id' => $used->id]);
 
     $this->actingAs($this->admin)->delete(route('admin.document-templates.destroy', $used))->assertSessionHas('error');
     expect(DocumentTemplate::find($used->id))->not->toBeNull();
@@ -199,7 +199,7 @@ it('fills a delivery template, repeats its rows, and escapes special characters'
     makeOrderItem($this->order, $this->wet, $this->supplier, ['qty_ordered' => 3]);
     $template = storedTemplate($this, DocumentTemplate::TANDA_TERIMA, ['sppg_name', 'tanggal', 'no_po'], array_slice(SJ_ROW, 0, 5));
 
-    $document = $this->documents->generateDocuments($this->dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->ops->id, null, ['document_template_id' => $template->id])['documents']->first();
+    $document = $this->documents->generateDocuments($this->dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->ops->id, ['document_template_id' => $template->id])['documents']->first();
 
     expect($this->converter->xml)
         ->toContain('SPPG Jombatan')
@@ -219,10 +219,10 @@ it('requires armada and driver only when the template uses them, and keeps a sna
     $armada = Armada::create(['name' => 'Truk 1', 'plate_number' => 'S 1234 AB']);
     $driver = Driver::create(['name' => 'Budi']);
 
-    expect(fn () => $this->documents->generateDocuments($this->dapur->id, SuratJalan::SURAT_JALAN, '2030-01-15', $this->ops->id, null, ['document_template_id' => $template->id]))
+    expect(fn () => $this->documents->generateDocuments($this->dapur->id, SuratJalan::SURAT_JALAN, '2030-01-15', $this->ops->id, ['document_template_id' => $template->id]))
         ->toThrow(ValidationException::class);
 
-    $document = $this->documents->generateDocuments($this->dapur->id, SuratJalan::SURAT_JALAN, '2030-01-15', $this->ops->id, null, [
+    $document = $this->documents->generateDocuments($this->dapur->id, SuratJalan::SURAT_JALAN, '2030-01-15', $this->ops->id, [
         'document_template_id' => $template->id, 'armada_id' => $armada->id, 'driver_id' => $driver->id,
     ])['documents']->first();
 
@@ -237,13 +237,13 @@ it('requires armada and driver only when the template uses them, and keeps a sna
 it('rejects an inactive template, armada, or a template of another type', function () {
     $template = storedTemplate($this, DocumentTemplate::INVOICE, ['invoice_number', 'grand_total'], INVOICE_ROW);
 
-    expect(fn () => $this->documents->generateDocuments($this->dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->ops->id, null, ['document_template_id' => $template->id]))
+    expect(fn () => $this->documents->generateDocuments($this->dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->ops->id, ['document_template_id' => $template->id]))
         ->toThrow(ValidationException::class);
 
     $tt = storedTemplate($this, DocumentTemplate::TANDA_TERIMA, [], array_slice(SJ_ROW, 0, 4));
     $tt->update(['is_active' => false]);
 
-    expect(fn () => $this->documents->generateDocuments($this->dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->ops->id, null, ['document_template_id' => $tt->id]))
+    expect(fn () => $this->documents->generateDocuments($this->dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->ops->id, ['document_template_id' => $tt->id]))
         ->toThrow(ValidationException::class);
 });
 
@@ -314,7 +314,7 @@ it('keeps the document when template rendering fails and renders on download', f
     $template = storedTemplate($this, DocumentTemplate::TANDA_TERIMA, [], array_slice(SJ_ROW, 0, 4));
     $this->converter->fail = true;
 
-    $document = $this->documents->generateDocuments($this->dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->ops->id, null, ['document_template_id' => $template->id])['documents']->first();
+    $document = $this->documents->generateDocuments($this->dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->ops->id, ['document_template_id' => $template->id])['documents']->first();
 
     expect($document->fresh()->pdf_url)->toBeNull();
     expect($this->line->fresh()->surat_jalan_id)->toBe($document->id);

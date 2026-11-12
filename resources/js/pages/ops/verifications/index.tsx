@@ -80,7 +80,7 @@ export default function VerificationsIndex({ tab, today, documents }: { tab: 'op
               <TableRow key={doc.id}>
                 <TableCell className="font-medium">{doc.sj_number}</TableCell>
                 <TableCell>{doc.dapur?.name}</TableCell>
-                <TableCell>{doc.supplier?.name}</TableCell>
+                <TableCell>{doc.supplier?.name ?? 'Semua supplier'}</TableCell>
                 <TableCell>
                   {doc.shipment_date}
                   {tab === 'open' && doc.shipment_date < today && <div className="text-xs font-medium text-amber-700">Sudah lewat</div>}

@@ -24,7 +24,7 @@
         @endphp
         Order: {{ $suratJalan->orderItems->pluck('order.order_number')->unique()->implode(', ') }} &middot;
         Dapur: {{ $dapur?->name }} ({{ $dapur?->code }}) &middot;
-        Supplier: {{ $suratJalan->supplier?->name ?? '-' }} &middot;
+        Supplier: {{ $suratJalan->supplier?->name ?? $suratJalan->orderItems->pluck('supplier.name')->filter()->unique()->sort()->implode(', ') }} &middot;
         Tanggal Kirim: {{ $shipmentDate?->format('d-m-Y') }}
     </p>
 
@@ -32,6 +32,7 @@
         <thead>
             <tr>
                 <th>Item</th>
+                <th>Supplier</th>
                 <th>Qty Dikirim</th>
                 <th>Qty Diterima</th>
                 <th>Qty Ditolak</th>
@@ -43,6 +44,7 @@
             @foreach ($suratJalan->orderItems as $item)
                 <tr>
                     <td>{{ $item->item->name }}</td>
+                    <td>{{ $item->supplier?->name }}</td>
                     <td>{{ \App\Support\Format::qty($item->qty_ordered) }} {{ $item->item->satuan->name }}</td>
                     <td>{{ \App\Support\Format::qty($item->qty_received) }}</td>
                     <td>{{ \App\Support\Format::qty($item->qty_rejected) }}</td>

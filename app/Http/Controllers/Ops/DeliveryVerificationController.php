@@ -17,8 +17,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Crosscheck H+1: the koperasi compares ordered qty, Dapur's STT, the nota and
- * the arrival photos for each delivery document. Legacy documents (no
- * supplier_id, predating per-supplier documents) are out of scope.
+ * the arrival photos for each delivery document. Legacy documents (with an
+ * order_id, predating per-supplier documents) are out of scope.
  */
 class DeliveryVerificationController extends Controller
 {
@@ -27,7 +27,7 @@ class DeliveryVerificationController extends Controller
         $validated = $request->validate(['tab' => ['nullable', Rule::in(['open', 'verified'])]]);
         $tab = $validated['tab'] ?? 'open';
 
-        $documents = SuratJalan::whereNotNull('supplier_id')
+        $documents = SuratJalan::crosscheckable()
             ->when(
                 $tab === 'open',
                 fn ($query) => $query->where('verification_status', '!=', SuratJalan::VERIFICATION_VERIFIED)->orderBy('shipment_date'),
@@ -48,10 +48,11 @@ class DeliveryVerificationController extends Controller
 
     public function show(SuratJalan $suratJalan): Response
     {
-        abort_if($suratJalan->supplier_id === null, 404);
+        abort_unless($suratJalan->isCrosscheckable(), 404);
 
-        $suratJalan->load(['dapur:id,name', 'supplier:id,name', 'verifiedBy:id,name', 'photos', 'purchaseNote.items']);
-        $notaQtyByLine = $suratJalan->purchaseNote?->items->pluck('qty', 'order_item_id') ?? collect();
+        $suratJalan->load(['dapur:id,name', 'supplier:id,name', 'verifiedBy:id,name', 'photos', 'purchaseNotes.items']);
+        $notaQtyByLine = $suratJalan->purchaseNotes->flatMap->items->pluck('qty', 'order_item_id');
+        $lines = $suratJalan->orderItems()->with(['item.satuan', 'order:id,order_number', 'supplier:id,name'])->get();
 
         return Inertia::render('ops/verifications/show', [
             'document' => [
@@ -60,21 +61,22 @@ class DeliveryVerificationController extends Controller
                 'document_type' => $suratJalan->document_type,
                 'shipment_date' => $suratJalan->shipment_date?->toDateString(),
                 'dapur_name' => $suratJalan->dapur?->name,
-                'supplier_name' => $suratJalan->supplier?->name,
+                'supplier_name' => $suratJalan->supplier?->name ?? $lines->pluck('supplier.name')->unique()->sort()->implode(', '),
                 'verification_status' => $suratJalan->verification_status,
                 'verification_notes' => $suratJalan->verification_notes,
                 'verified_by_name' => $suratJalan->verifiedBy?->name,
                 'verified_at' => $suratJalan->verified_at?->toDateTimeString(),
-                'nota_number' => $suratJalan->purchaseNote?->note_number,
+                'nota_number' => $suratJalan->purchaseNotes->pluck('note_number')->implode(', ') ?: null,
                 'photos' => $suratJalan->photos->map(fn (DeliveryDocumentPhoto $photo) => [
                     'id' => $photo->id,
                     'original_name' => $photo->original_name,
                     'url' => route('ops.verifications.photos.show', [$suratJalan, $photo]),
                 ])->values(),
-                'lines' => $suratJalan->orderItems()->with(['item.satuan', 'order:id,order_number'])->get()
+                'lines' => $lines
                     ->map(fn (OrderItem $line) => [
                         'id' => $line->id,
                         'item_name' => $line->item->name,
+                        'supplier_name' => $line->supplier?->name,
                         'satuan' => $line->item->satuan?->name,
                         'order_number' => $line->order->order_number,
                         'qty_ordered' => (float) $line->qty_ordered,
@@ -89,7 +91,7 @@ class DeliveryVerificationController extends Controller
 
     public function verify(Request $request, SuratJalan $suratJalan, DeliveryVerificationService $service): RedirectResponse
     {
-        abort_if($suratJalan->supplier_id === null, 404);
+        abort_unless($suratJalan->isCrosscheckable(), 404);
 
         $validated = $request->validate(['notes' => ['nullable', 'string', 'max:2000']]);
         $service->verify($suratJalan, $request->user(), $validated['notes'] ?? null);
@@ -100,7 +102,7 @@ class DeliveryVerificationController extends Controller
 
     public function discrepancy(Request $request, SuratJalan $suratJalan, DeliveryVerificationService $service): RedirectResponse
     {
-        abort_if($suratJalan->supplier_id === null, 404);
+        abort_unless($suratJalan->isCrosscheckable(), 404);
 
         $validated = $request->validate(['notes' => ['required', 'string', 'max:2000']]);
         $service->markDiscrepancy($suratJalan, $request->user(), $validated['notes']);

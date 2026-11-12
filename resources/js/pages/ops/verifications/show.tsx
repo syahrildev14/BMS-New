@@ -14,6 +14,7 @@ import type { DeliveryDocumentType, DeliveryVerificationStatus } from '@/shared/
 interface Line {
   id: number;
   item_name: string;
+  supplier_name: string | null;
   satuan: string | null;
   order_number: string;
   qty_ordered: number;
@@ -93,6 +94,7 @@ export default function VerificationShow({ document: doc }: { document: Verifica
           <TableHeader>
             <TableRow>
               <TableHead>Barang</TableHead>
+              <TableHead>Supplier</TableHead>
               <TableHead>Order</TableHead>
               <TableHead className="text-right">Qty Pesan</TableHead>
               <TableHead className="text-right">Diterima</TableHead>
@@ -105,6 +107,7 @@ export default function VerificationShow({ document: doc }: { document: Verifica
             {doc.lines.map((line) => (
               <TableRow key={line.id} className={lineDiffers(line) ? 'bg-amber-50 dark:bg-amber-950' : ''}>
                 <TableCell className="font-medium">{line.item_name}</TableCell>
+                <TableCell>{line.supplier_name ?? '—'}</TableCell>
                 <TableCell className="text-xs">{line.order_number}</TableCell>
                 <TableCell className="text-right">
                   {formatQty(line.qty_ordered)} {line.satuan}

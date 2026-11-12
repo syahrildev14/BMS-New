@@ -7,12 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * Delivery document. SURAT_JALAN = dry goods shipped by the koperasi;
  * TANDA_TERIMA = wet goods delivered straight by the Supplier. One document
- * per Dapur + Supplier, and it may cover order_items from several Orders —
+ * per Dapur per shipment date covering every supplier (supplier_id is NULL;
+ * older documents have one), and it may cover order_items from several Orders —
  * order_id is legacy (documents created before 2026-11-05 only).
  */
 class SuratJalan extends Model
@@ -105,9 +105,23 @@ class SuratJalan extends Model
         return $this->belongsTo(User::class, 'verified_by');
     }
 
-    /** Wet-goods Nota Pembelian for this Tanda Terima (at most one). */
-    public function purchaseNote(): HasOne
+    /** Wet-goods Nota Pembelian for this Tanda Terima: one per supplier on it. */
+    public function purchaseNotes(): HasMany
     {
-        return $this->hasOne(PurchaseNote::class);
+        return $this->hasMany(PurchaseNote::class);
+    }
+
+    /**
+     * Documents issued since per-supplier documents (2026-11-05) have no
+     * order_id; only those take part in the Crosscheck H+1.
+     */
+    public function scopeCrosscheckable($query)
+    {
+        return $query->whereNull('order_id');
+    }
+
+    public function isCrosscheckable(): bool
+    {
+        return $this->order_id === null;
     }
 }

@@ -66,3 +66,19 @@ it('lets a user with invoices.approve mark an invoice as paid', function () {
     $response->assertRedirect();
     expect($invoice->refresh()->status)->toBe('PAID');
 });
+
+it('shows the item count and qty breakdown of each invoice on the date page', function () {
+    $this->seed(RoleAndPermissionSeeder::class);
+    ['invoice' => $invoice] = setUpIssuedInvoice();
+    $finance = User::factory()->create();
+    $finance->givePermissionTo(['invoices.manage']);
+
+    $this->actingAs($finance)
+        ->get(route('finance.invoices.by-date', $invoice->order->delivery_date->toDateString()))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('invoices.0.item_count', 1)
+            ->where('invoices.0.lines.0.qty_received', 5)
+            ->where('invoices.0.lines.0.qty_accepted', 5)
+            ->where('invoices.0.lines.0.subtotal', 5000));
+});

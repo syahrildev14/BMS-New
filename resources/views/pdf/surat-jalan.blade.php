@@ -29,7 +29,7 @@
         <p class="muted">
             <span class="badge">{{ $suratJalan->type }}</span> &middot;
             Tanggal Kirim: {{ $shipmentDate?->format('d-m-Y') }} &middot;
-            Supplier: {{ $suratJalan->supplier?->name ?? '-' }}
+            Supplier: {{ $suratJalan->supplier?->name ?? $suratJalan->orderItems->pluck('supplier.name')->filter()->unique()->sort()->implode(', ') }}
         </p>
 
         <table>
@@ -46,6 +46,7 @@
             <thead>
                 <tr>
                     <th>Item</th>
+                    <th>Supplier</th>
                     <th>Qty Dikirim</th>
                     <th>Satuan</th>
                     <th>No. Order</th>
@@ -56,6 +57,7 @@
                 @foreach ($lines as $line)
                     <tr>
                         <td>{{ $line->item->name }}</td>
+                        <td>{{ $line->supplier?->name }}</td>
                         <td>{{ \App\Support\Format::qty($line->qty_ordered) }}</td>
                         <td>{{ $line->item->satuan->name }}</td>
                         <td>{{ $line->order->order_number }}</td>
@@ -80,7 +82,7 @@
     <p class="muted">
         {{ $isSuratJalan ? 'Bahan Kering — dikirim Koperasi' : 'Bahan Basah — dikirim langsung Supplier' }} &middot;
         Tanggal Kirim: {{ $shipmentDate?->format('d-m-Y') }} &middot;
-        Supplier: {{ $suratJalan->supplier?->name ?? '-' }}
+        Supplier: {{ $suratJalan->supplier?->name ?? $suratJalan->orderItems->pluck('supplier.name')->filter()->unique()->sort()->implode(', ') }}
     </p>
     <p class="muted">Dapur: {{ $dapur?->name }} ({{ $dapur?->code }})</p>
 
@@ -88,6 +90,7 @@
         <thead>
             <tr>
                 <th>Item</th>
+                <th>Supplier</th>
                 <th>Qty Pesan</th>
                 <th>Satuan</th>
                 <th>No. Order</th>
@@ -100,6 +103,7 @@
             @foreach ($lines as $line)
                 <tr>
                     <td>{{ $line->item->name }}</td>
+                    <td>{{ $line->supplier?->name }}</td>
                     <td>{{ \App\Support\Format::qty($line->qty_ordered) }}</td>
                     <td>{{ $line->item->satuan->name }}</td>
                     <td>{{ $line->order->order_number }}</td>

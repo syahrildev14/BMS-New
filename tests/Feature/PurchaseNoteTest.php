@@ -110,11 +110,11 @@ it('prices each Dapur\'s wet lines from its own nota and flags qty differences',
     $lineA = $ttA->orderItems()->firstOrFail();
     $lineB = $ttB->orderItems()->firstOrFail();
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $ttA), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$ttA, $ttA->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $lineA->id, 'qty' => 10, 'unit_price' => 40000]],
     ])->assertSessionHasNoErrors();
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $ttB), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$ttB, $ttB->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $lineB->id, 'qty' => 4, 'unit_price' => 42000]],
     ])->assertSessionHasNoErrors();
 
@@ -143,7 +143,7 @@ it('allows only one nota per Tanda Terima and requires every line of it', functi
     $lineAyam = makeOrderItem($order, $ayam, $supplier);
     $tt = app(DeliveryNoteService::class)->generateDocuments($dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->opsUser->id)['documents']->first();
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $tt), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$tt, $tt->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $lineSayur->id, 'qty' => 10, 'unit_price' => 1000]],
     ])->assertSessionHasErrors('items');
     expect(PurchaseNote::count())->toBe(0);
@@ -152,8 +152,8 @@ it('allows only one nota per Tanda Terima and requires every line of it', functi
         ['order_item_id' => $lineSayur->id, 'qty' => 10, 'unit_price' => 1000],
         ['order_item_id' => $lineAyam->id, 'qty' => 10, 'unit_price' => 2000],
     ]];
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $tt), $full)->assertSessionHasNoErrors();
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $tt), $full)->assertSessionHasErrors('surat_jalan_id');
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$tt, $tt->orderItems()->value('supplier_id')]), $full)->assertSessionHasNoErrors();
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$tt, $tt->orderItems()->value('supplier_id')]), $full)->assertSessionHasErrors('surat_jalan_id');
 
     expect(PurchaseNote::count())->toBe(1);
 });
@@ -168,7 +168,7 @@ it('keeps nota prices when a manual daily price is entered later', function () {
     $lineA = $ttA->orderItems()->firstOrFail();
     $lineB = $ttB->orderItems()->firstOrFail();
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $ttA), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$ttA, $ttA->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $lineA->id, 'qty' => 10, 'unit_price' => 7000]],
     ])->assertSessionHasNoErrors();
 
@@ -185,7 +185,7 @@ it('lets a wet nota be corrected until the invoice is issued', function () {
     $tt = wetTandaTerima($dapur, $sayur, $supplier);
     $line = $tt->orderItems()->firstOrFail();
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $tt), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$tt, $tt->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $line->id, 'qty' => 10, 'unit_price' => 7000]],
     ]);
     $note = PurchaseNote::firstOrFail();
@@ -257,4 +257,59 @@ it('requires the purchase-notes permission', function () {
     $this->actingAs($dapurUser)->get(route('purchasing.purchase-notes.index'))->assertForbidden();
     $this->actingAs($dapurUser)->get(route('purchasing.shopping-list.index'))->assertForbidden();
     $this->actingAs($this->purchasing)->get(route('purchasing.purchase-notes.index'))->assertOk();
+});
+
+it('takes one wet nota per supplier on a combined Tanda Terima', function () {
+    $sayurSupplier = makeSupplier(['name' => 'Sayur Jaya']);
+    $dagingSupplier = makeSupplier(['name' => 'Daging Segar']);
+    $sayur = makeItem(['category' => 'WET_GOODS', 'default_supplier_id' => $sayurSupplier->id]);
+    $ayam = makeItem(['category' => 'WET_GOODS', 'default_supplier_id' => $dagingSupplier->id]);
+    $dapur = makeDapur();
+    $order = makeOrder($dapur, ['delivery_date' => '2030-01-15']);
+    $lineSayur = makeOrderItem($order, $sayur, $sayurSupplier, ['qty_ordered' => 10]);
+    $lineAyam = makeOrderItem($order, $ayam, $dagingSupplier, ['qty_ordered' => 5]);
+
+    $documents = app(DeliveryNoteService::class)
+        ->generateDocuments($dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->opsUser->id)['documents'];
+    expect($documents)->toHaveCount(1);
+    $tt = $documents->first();
+
+    $this->actingAs($this->purchasing)->get(route('purchasing.purchase-notes.index'))
+        ->assertInertia(fn ($page) => $page->has('pendingTandaTerima', 2));
+
+    // A nota only covers its own supplier's lines.
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$tt, $sayurSupplier]), [
+        'items' => [
+            ['order_item_id' => $lineSayur->id, 'qty' => 10, 'unit_price' => 7000],
+            ['order_item_id' => $lineAyam->id, 'qty' => 5, 'unit_price' => 40000],
+        ],
+    ])->assertSessionHasErrors('items');
+
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$tt, $sayurSupplier]), [
+        'items' => [['order_item_id' => $lineSayur->id, 'qty' => 10, 'unit_price' => 7000]],
+    ])->assertSessionHasNoErrors();
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$tt, $dagingSupplier]), [
+        'items' => [['order_item_id' => $lineAyam->id, 'qty' => 5, 'unit_price' => 40000]],
+    ])->assertSessionHasNoErrors();
+
+    expect(PurchaseNote::where('surat_jalan_id', $tt->id)->pluck('supplier_id')->sort()->values()->all())
+        ->toBe(collect([$sayurSupplier->id, $dagingSupplier->id])->sort()->values()->all());
+    expect((float) $lineSayur->fresh()->final_cost_price)->toBe(7000.0);
+    expect((float) $lineAyam->fresh()->final_cost_price)->toBe(40000.0);
+
+    // A second nota for the same supplier is refused.
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$tt, $sayurSupplier]), [
+        'items' => [['order_item_id' => $lineSayur->id, 'qty' => 10, 'unit_price' => 7000]],
+    ])->assertSessionHasErrors('surat_jalan_id');
+
+    // Correcting one supplier's nota leaves the other supplier's prices alone.
+    $note = PurchaseNote::where('supplier_id', $sayurSupplier->id)->firstOrFail();
+    $this->actingAs($this->purchasing)->put(route('purchasing.purchase-notes.update', $note), [
+        'items' => [['order_item_id' => $lineSayur->id, 'qty' => 10, 'unit_price' => 7500]],
+    ])->assertSessionHasNoErrors();
+    expect((float) $lineSayur->fresh()->final_cost_price)->toBe(7500.0);
+    expect((float) $lineAyam->fresh()->final_cost_price)->toBe(40000.0);
+
+    $this->actingAs($this->purchasing)->get(route('purchasing.purchase-notes.index'))
+        ->assertInertia(fn ($page) => $page->has('pendingTandaTerima', 0));
 });

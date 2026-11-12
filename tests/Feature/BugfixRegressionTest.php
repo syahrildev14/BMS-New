@@ -70,7 +70,7 @@ function makeBill(Order $order, $supplier, string $status): SupplierBill
 it('A1: rejects a wet nota with a blank price when goods were delivered', function () {
     [, $line, $tt] = issueTt($this);
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $tt), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$tt, $tt->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $line->id, 'qty' => 10, 'unit_price' => '']],
     ])->assertSessionHasErrors('items.0.unit_price');
 
@@ -94,7 +94,7 @@ it('A1: rejects a dry nota with a zero or blank price', function () {
 it('C5: an undelivered wet line (qty 0) does not touch master or daily prices', function () {
     [, $line, $tt] = issueTt($this);
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $tt), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$tt, $tt->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $line->id, 'qty' => 0, 'unit_price' => '']],
     ])->assertSessionHasNoErrors();
 
@@ -107,10 +107,10 @@ it('C5: an older nota does not move the master price backward', function () {
     [, $lineNew, $ttNew] = issueTt($this, makeOrder($this->dapur, ['delivery_date' => '2030-01-20']));
     [, $lineOld, $ttOld] = issueTt($this, makeOrder($this->dapur, ['delivery_date' => '2030-01-10']));
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $ttNew), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$ttNew, $ttNew->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $lineNew->id, 'qty' => 10, 'unit_price' => 13000]],
     ]);
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $ttOld), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$ttOld, $ttOld->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $lineOld->id, 'qty' => 10, 'unit_price' => 10000]],
     ]);
 
@@ -121,7 +121,7 @@ it('C5: an older nota does not move the master price backward', function () {
 it('rejects nota amounts that would overflow their decimal columns', function () {
     [, $line, $tt] = issueTt($this);
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $tt), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$tt, $tt->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $line->id, 'qty' => 99999999, 'unit_price' => 99999999]],
     ])->assertSessionHasErrors('items.0.unit_price');
 
@@ -132,7 +132,7 @@ it('A2: refuses a first wet nota once the invoice is final', function () {
     [$order, $line, $tt] = issueTt($this);
     makeInvoice($order, $this->supplier, 'PAID');
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $tt), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$tt, $tt->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $line->id, 'qty' => 10, 'unit_price' => 5000]],
     ])->assertSessionHasErrors('note');
 
@@ -144,7 +144,7 @@ it('A3: a wet nota voids DRAFT invoices and bills so stale amounts cannot be app
     $invoice = makeInvoice($order, $this->supplier, 'DRAFT');
     $bill = makeBill($order, $this->supplier, 'DRAFT');
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $tt), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$tt, $tt->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $line->id, 'qty' => 10, 'unit_price' => 5000]],
     ])->assertSessionHasNoErrors();
 
@@ -161,7 +161,7 @@ it('A3: a wet nota voids DRAFT invoices and bills so stale amounts cannot be app
 
 it('A7: refuses to correct a nota once the supplier bill is final', function () {
     [$order, $line, $tt] = issueTt($this);
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $tt), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$tt, $tt->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $line->id, 'qty' => 10, 'unit_price' => 5000]],
     ]);
     makeBill($order, $this->supplier, 'ISSUED');
@@ -320,8 +320,8 @@ it('numbers documents in sequence across Orders of one Dapur on one day', functi
     [, , $first] = issueTt($this, makeOrder($this->dapur, ['delivery_date' => '2030-02-01']));
     [, , $second] = issueTt($this, makeOrder($this->dapur, ['delivery_date' => '2030-02-02']));
 
-    expect($first->sj_number)->toBe('TT/20300115/DPR-A/SUP/01');
-    expect($second->sj_number)->toBe('TT/20300115/DPR-A/SUP/02');
+    expect($first->sj_number)->toBe('TT/20300115/DPR-A/01');
+    expect($second->sj_number)->toBe('TT/20300115/DPR-A/02');
 });
 
 it('B6: a wet line picks up the daily price entered before its document', function () {
@@ -337,11 +337,11 @@ it('B6: a wet line picks up the daily price entered before its document', functi
     expect((float) $line->fresh()->final_selling_price)->toBe(11000.0);
 });
 
-it('C1: does not expose cost, margin or supplier data to Dapur', function () {
+it('C1: does not expose cost or margin data to Dapur', function () {
     $order = makeOrder($this->dapur, ['delivery_date' => '2030-01-15']);
     makeOrderItem($order, $this->wet, $this->supplier, ['final_cost_price' => 900]);
 
-    $forbidden = ['base_cost_price', 'margin_type', 'margin_value', 'default_supplier', 'final_cost_price'];
+    $forbidden = ['base_cost_price', 'margin_type', 'margin_value', 'final_cost_price'];
 
     foreach ([route('dapur.orders.create'), route('dapur.orders.show', $order), route('dapur.orders.index')] as $url) {
         $response = $this->actingAs($this->owner)->get($url)->assertOk();
@@ -353,17 +353,17 @@ it('C1: does not expose cost, margin or supplier data to Dapur', function () {
     }
 });
 
-it('C2: gives earlier delivery dates stock first even when generating one supplier', function () {
+it('C2: gives earlier delivery dates stock first across suppliers', function () {
     $otherSupplier = makeSupplier(['code' => 'OTH']);
     makeStockLot($this->gudang, $this->dry, 10, 1000);
     $earlier = makeOrderItem(makeOrder($this->dapur, ['delivery_date' => '2030-01-14']), $this->dry, $otherSupplier, ['qty_ordered' => 8]);
     $later = makeOrderItem(makeOrder($this->dapur, ['delivery_date' => '2030-01-15']), $this->dry, $this->supplier, ['qty_ordered' => 8]);
 
-    $result = $this->documents->generateDocuments($this->dapur->id, SuratJalan::SURAT_JALAN, '2030-01-15', $this->ops->id, $this->supplier->id);
+    $result = $this->documents->generateDocuments($this->dapur->id, SuratJalan::SURAT_JALAN, '2030-01-15', $this->ops->id);
 
-    expect($result['documents'])->toHaveCount(0);
+    expect($result['documents'])->toHaveCount(1);
     expect($result['held_items']->pluck('id')->all())->toBe([$later->id]);
-    expect($earlier->fresh()->surat_jalan_id)->toBeNull();
+    expect($earlier->fresh()->surat_jalan_id)->toBe($result['documents']->first()->id);
 });
 
 it('does not wrongly hold a line because of float rounding', function () {
@@ -390,10 +390,7 @@ it('C4: numbers documents and notas by the Jakarta date, sequenced per Dapur and
 
     $documents = $this->documents->generateDocuments($this->dapur->id, SuratJalan::TANDA_TERIMA, '2030-01-15', $this->ops->id)['documents'];
 
-    expect($documents->pluck('sj_number')->sort()->values()->all())->toBe([
-        'TT/20300115/DPR-A/DUA/02',
-        'TT/20300115/DPR-A/SUP/01',
-    ]);
+    expect($documents->pluck('sj_number')->all())->toBe(['TT/20300115/DPR-A/01']);
 
     $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store'), [
         'supplier_id' => $this->supplier->id,

@@ -9,29 +9,30 @@ import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
 import type { Item } from '@/shared/types/prd.type';
 
-// Dapur only chooses item + qty — supplier and price are filled in by the
-// server from the item master (koperasi decides those, not Dapur).
+// Dapur chooses item, qty and supplier (pre-filled with the item's default
+// supplier). Price is filled in by the server from the item master.
 interface OrderLineForm {
   key: number;
   item_id: string;
+  supplier_id: string;
   qty_ordered: string;
 }
 
 let nextKey = 1;
 
 function emptyLine(): OrderLineForm {
-  return { key: nextKey++, item_id: '', qty_ordered: '' };
+  return { key: nextKey++, item_id: '', supplier_id: '', qty_ordered: '' };
 }
 
 const isFilled = (line: OrderLineForm) => Boolean(line.item_id && line.qty_ordered);
 
-export default function DapurOrdersCreate({ items }: { items: Item[] }) {
+export default function DapurOrdersCreate({ items, suppliers }: { items: Item[]; suppliers: { id: number; name: string }[] }) {
   const [lines, setLines] = useState<OrderLineForm[]>([emptyLine()]);
 
   const { data, setData, transform, post, processing, errors } = useForm({
     delivery_date: '',
     notes: '',
-    items: [] as { item_id: number; qty_ordered: number }[],
+    items: [] as { item_id: number; supplier_id: number | null; qty_ordered: number }[],
   });
 
   const lineErrors = errors as Record<string, string | undefined>;
@@ -48,6 +49,7 @@ export default function DapurOrdersCreate({ items }: { items: Item[] }) {
 
     const payload = lines.filter(isFilled).map((line) => ({
       item_id: Number(line.item_id),
+      supplier_id: line.supplier_id ? Number(line.supplier_id) : null,
       qty_ordered: Number(line.qty_ordered),
     }));
 
@@ -99,14 +101,21 @@ export default function DapurOrdersCreate({ items }: { items: Item[] }) {
             const submittedIndex = filledLines.indexOf(line);
             const itemError = submittedIndex >= 0 ? lineErrors[`items.${submittedIndex}.item_id`] : undefined;
             const qtyError = submittedIndex >= 0 ? lineErrors[`items.${submittedIndex}.qty_ordered`] : undefined;
+            const supplierError = submittedIndex >= 0 ? lineErrors[`items.${submittedIndex}.supplier_id`] : undefined;
 
             return (
               <div key={line.key} className="grid grid-cols-12 items-start gap-2 border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
-                <div className="col-span-7 flex flex-col gap-1">
+                <div className="col-span-12 flex flex-col gap-1 sm:col-span-5">
                   <Label>Item</Label>
                   <Combobox
                     value={line.item_id}
-                    onValueChange={(v) => updateLine(line.key, { item_id: v })}
+                    onValueChange={(v) => {
+                      const picked = items.find((i) => String(i.id) === v);
+                      updateLine(line.key, {
+                        item_id: v,
+                        supplier_id: picked?.default_supplier_id ? String(picked.default_supplier_id) : line.supplier_id,
+                      });
+                    }}
                     placeholder="Ketik untuk cari item..."
                     emptyText="Item tidak ditemukan."
                     options={items.map((item) => ({ value: String(item.id), label: `${item.name} (${item.satuan?.name})` }))}
@@ -114,7 +123,19 @@ export default function DapurOrdersCreate({ items }: { items: Item[] }) {
                   {itemError && <p className="text-xs text-red-500">{itemError}</p>}
                 </div>
 
-                <div className="col-span-4 flex flex-col gap-1">
+                <div className="col-span-12 flex flex-col gap-1 sm:col-span-4">
+                  <Label>Supplier</Label>
+                  <Combobox
+                    value={line.supplier_id}
+                    onValueChange={(v) => updateLine(line.key, { supplier_id: v })}
+                    placeholder="Pilih supplier..."
+                    emptyText="Supplier tidak ditemukan."
+                    options={suppliers.map((supplier) => ({ value: String(supplier.id), label: supplier.name }))}
+                  />
+                  {supplierError && <p className="text-xs text-red-500">{supplierError}</p>}
+                </div>
+
+                <div className="col-span-10 flex flex-col gap-1 sm:col-span-2">
                   <Label>Qty {selectedItem ? `(${selectedItem.satuan?.name})` : ''}</Label>
                   <Input
                     type="number"
@@ -126,7 +147,7 @@ export default function DapurOrdersCreate({ items }: { items: Item[] }) {
                   {qtyError && <p className="text-xs text-red-500">{qtyError}</p>}
                 </div>
 
-                <div className="col-span-1 flex justify-end pt-6">
+                <div className="col-span-2 flex justify-end pt-6 sm:col-span-1">
                   <Button type="button" variant="ghost" size="icon" onClick={() => removeLine(line.key)} disabled={lines.length === 1}>
                     <Trash2 className="h-4 w-4 text-red-500" />
                   </Button>

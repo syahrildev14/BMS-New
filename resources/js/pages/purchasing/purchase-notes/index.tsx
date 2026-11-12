@@ -30,7 +30,7 @@ interface PendingTandaTerima {
   shipment_date: string;
   order_items_count: number;
   dapur?: { name: string };
-  supplier?: { name: string };
+  supplier: { id: number; name: string };
 }
 
 const columns: TableColumn<NoteRow>[] = [
@@ -64,13 +64,13 @@ export default function PurchaseNotesIndex({ notes, pendingTandaTerima }: { note
         ) : (
           <div className="flex flex-col divide-y divide-amber-100">
             {pendingTandaTerima.map((tt) => (
-              <div key={tt.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+              <div key={`${tt.id}-${tt.supplier.id}`} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
                 <span>
-                  <span className="font-medium">{tt.sj_number}</span> — {tt.dapur?.name} — {tt.supplier?.name} — kirim {tt.shipment_date} (
+                  <span className="font-medium">{tt.sj_number}</span> — {tt.dapur?.name} — {tt.supplier.name} — kirim {tt.shipment_date} (
                   {tt.order_items_count} barang)
                 </span>
                 <Button size="sm" asChild>
-                  <Link href={route('purchasing.purchase-notes.create-wet', tt.id)}>Input Nota</Link>
+                  <Link href={route('purchasing.purchase-notes.create-wet', [tt.id, tt.supplier.id])}>Input Nota</Link>
                 </Button>
               </div>
             ))}

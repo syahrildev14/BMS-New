@@ -70,8 +70,7 @@ export default function OpsDeliveryNotesIndex({
   const [dapurId, setDapurId] = useState(filters.dapur_id ? String(filters.dapur_id) : '');
   const [documentType, setDocumentType] = useState<DeliveryDocumentType>(filters.document_type);
   const [date, setDate] = useState(filters.date);
-  // 'all' = Generate semua; a number = one supplier group.
-  const [processing, setProcessing] = useState<number | 'all' | null>(null);
+  const [processing, setProcessing] = useState(false);
   const [templateId, setTemplateId] = useState('');
   const [armadaId, setArmadaId] = useState('');
   const [driverId, setDriverId] = useState('');
@@ -93,22 +92,22 @@ export default function OpsDeliveryNotesIndex({
     router.get(route('ops.delivery-notes.index'), { dapur_id: dapurId, document_type: documentType, date }, { preserveState: true });
   };
 
-  const generate = (supplierId: number | null) => {
-    setProcessing(supplierId ?? 'all');
+  // One document per Dapur per shipment date, covering every supplier.
+  const generate = () => {
+    setProcessing(true);
     router.post(
       route('ops.delivery-notes.store'),
       {
         dapur_id: Number(dapurId),
         document_type: documentType,
         date,
-        supplier_id: supplierId,
         document_template_id: selectedTemplate?.id ?? null,
         armada_id: needsArmada ? Number(armadaId) : null,
         driver_id: needsDriver ? Number(driverId) : null,
       },
       {
         preserveScroll: true,
-        onFinish: () => setProcessing(null),
+        onFinish: () => setProcessing(false),
         onError: (errors) => errorAlert(Object.values(errors)[0] ?? 'Gagal menerbitkan dokumen.'),
       },
     );
@@ -120,7 +119,7 @@ export default function OpsDeliveryNotesIndex({
 
       <PageHeader
         title="Pengiriman — Surat Jalan & Tanda Terima"
-        description="Surat Jalan untuk bahan kering dari koperasi (boleh gabung beberapa order), Tanda Terima harian untuk bahan basah yang dikirim langsung supplier. Satu dokumen per Dapur per supplier."
+        description="Surat Jalan untuk bahan kering dari koperasi (boleh gabung beberapa order), Tanda Terima harian untuk bahan basah yang dikirim langsung supplier. Satu dokumen per Dapur per tanggal kirim, gabungan semua supplier."
         breadcrumbs={[{ label: 'Ops' }, { label: 'Pengiriman' }]}
       />
 
@@ -169,11 +168,11 @@ export default function OpsDeliveryNotesIndex({
         <div className="mb-8 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-gray-700">
-              Item siap kirim — {DOC_LABEL[documentType]} ({pendingGroups.length} supplier)
+              Item siap kirim — {DOC_LABEL[documentType]} ({pendingGroups.length} supplier, digabung jadi 1 dokumen)
             </h2>
-            {pendingGroups.length > 1 && (
-              <Button size="sm" onClick={() => generate(null)} disabled={processing !== null || !canGenerate}>
-                {processing === 'all' ? 'Memproses...' : 'Generate Semua'}
+            {pendingGroups.length > 0 && (
+              <Button size="sm" onClick={generate} disabled={processing || !canGenerate}>
+                {processing ? 'Memproses...' : `Generate ${isDry ? 'Surat Jalan' : 'Tanda Terima'}`}
               </Button>
             )}
           </div>
@@ -227,11 +226,8 @@ export default function OpsDeliveryNotesIndex({
           ) : (
             pendingGroups.map((group) => (
               <div key={group.supplier_id} className="rounded-md border border-gray-200">
-                <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2">
+                <div className="border-b border-gray-100 px-4 py-2">
                   <span className="font-medium">{group.supplier_name}</span>
-                  <Button size="sm" onClick={() => generate(group.supplier_id)} disabled={processing !== null || !canGenerate}>
-                    {processing === group.supplier_id ? 'Memproses...' : `Generate ${isDry ? 'Surat Jalan' : 'Tanda Terima'}`}
-                  </Button>
                 </div>
                 <Table>
                   <TableHeader>
@@ -296,7 +292,7 @@ export default function OpsDeliveryNotesIndex({
                 <TableCell className="font-medium">{doc.sj_number}</TableCell>
                 <TableCell>{DOC_LABEL[doc.document_type]}</TableCell>
                 <TableCell>{doc.dapur?.name ?? '—'}</TableCell>
-                <TableCell>{doc.supplier?.name ?? 'Campuran (lama)'}</TableCell>
+                <TableCell>{doc.supplier?.name ?? 'Semua supplier'}</TableCell>
                 <TableCell>{doc.shipment_date ?? '—'}</TableCell>
                 <TableCell>{doc.order_items_count}</TableCell>
                 <TableCell className="text-right">

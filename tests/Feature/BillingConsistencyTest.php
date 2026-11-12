@@ -175,7 +175,7 @@ it('still protects lines covered by a paid invoice and its additional invoice', 
     $this->invoices->approveInvoice($this->invoices->generateInvoicesForOrder($this->order)->first());
 
     foreach ([[$first, $line, 10], [$addon, $addonLine, 4]] as [$document, $orderItem, $qty]) {
-        $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $document), [
+        $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$document, $document->orderItems()->value('supplier_id')]), [
             'items' => [['order_item_id' => $orderItem->id, 'qty' => $qty, 'unit_price' => 1]],
         ])->assertSessionHasErrors('note');
     }
@@ -313,7 +313,7 @@ it('accepts a nota for add-on lines the issued invoice does not cover, then bill
     $addon = billingDocument($this, SuratJalan::VERIFICATION_PENDING, 'ADDON');
     $line = makeOrderItem($this->order, $this->wet, $this->supplier, ['surat_jalan_id' => $addon->id, 'qty_ordered' => 4]);
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $addon), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$addon, $addon->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $line->id, 'qty' => 4, 'unit_price' => 1000]],
     ])->assertSessionHasNoErrors();
 
@@ -331,7 +331,7 @@ it('still refuses a nota for lines the issued invoice covers', function () {
     $line = billingLine($this, $document, 10);
     $this->invoices->approveInvoice($this->invoices->generateInvoicesForOrder($this->order)->first());
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $document), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$document, $document->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $line->id, 'qty' => 10, 'unit_price' => 1]],
     ])->assertSessionHasErrors('note');
 
@@ -342,7 +342,7 @@ it('keeps the price of a line the nota reports as undelivered', function () {
     $document = billingDocument($this, SuratJalan::VERIFICATION_PENDING);
     $line = billingLine($this, $document, 5);
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $document), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$document, $document->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $line->id, 'qty' => 0, 'unit_price' => '']],
     ])->assertSessionHasNoErrors();
 
@@ -356,7 +356,7 @@ it('does not bill a received line at zero when the nota reports it undelivered',
         'surat_jalan_id' => $document->id, 'qty_ordered' => 5, 'qty_received' => 5, 'qty_rejected' => 0,
     ]);
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $document), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$document, $document->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $line->id, 'qty' => 0, 'unit_price' => '']],
     ])->assertSessionHasNoErrors();
 
@@ -382,7 +382,7 @@ it('clears the nota price when a correction reports the line as undelivered', fu
     $document = billingDocument($this, SuratJalan::VERIFICATION_PENDING);
     $line = makeOrderItem($this->order, $this->wet, $this->supplier, ['surat_jalan_id' => $document->id, 'qty_ordered' => 5]);
 
-    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', $document), [
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store-wet', [$document, $document->orderItems()->value('supplier_id')]), [
         'items' => [['order_item_id' => $line->id, 'qty' => 5, 'unit_price' => 1000]],
     ])->assertSessionHasNoErrors();
     expect((float) $line->fresh()->final_cost_price)->toBe(1000.0);

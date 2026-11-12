@@ -97,8 +97,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('purchase-notes', [PurchaseNoteController::class, 'index'])->name('purchase-notes.index');
         Route::get('purchase-notes/create', [PurchaseNoteController::class, 'create'])->name('purchase-notes.create');
         Route::post('purchase-notes', [PurchaseNoteController::class, 'store'])->name('purchase-notes.store');
-        Route::get('purchase-notes/tanda-terima/{suratJalan}', [PurchaseNoteController::class, 'createWet'])->name('purchase-notes.create-wet');
-        Route::post('purchase-notes/tanda-terima/{suratJalan}', [PurchaseNoteController::class, 'storeWet'])->name('purchase-notes.store-wet');
+        Route::get('purchase-notes/tanda-terima/{suratJalan}/supplier/{supplier}', [PurchaseNoteController::class, 'createWet'])->name('purchase-notes.create-wet');
+        Route::post('purchase-notes/tanda-terima/{suratJalan}/supplier/{supplier}', [PurchaseNoteController::class, 'storeWet'])->name('purchase-notes.store-wet');
         Route::get('purchase-notes/{purchaseNote}/edit', [PurchaseNoteController::class, 'edit'])->name('purchase-notes.edit');
         Route::put('purchase-notes/{purchaseNote}', [PurchaseNoteController::class, 'update'])->name('purchase-notes.update');
     });

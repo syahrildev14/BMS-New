@@ -15,7 +15,7 @@ it('has a default Gudang right after migrating, without any seeder', function ()
     expect(Gudang::first()->code)->toBe('GDG-PUSAT');
 });
 
-it('lets Dapur create an order with only item + qty; supplier and price come from the item master', function () {
+it('lets Dapur create an order with only item + qty; supplier defaults to the item master and price comes from it', function () {
     $dapur = makeDapur();
     $supplier = makeSupplier();
     $item = makeItem(['category' => 'WET_GOODS', 'default_supplier_id' => $supplier->id, 'base_selling_price' => 12500]);
@@ -33,7 +33,7 @@ it('lets Dapur create an order with only item + qty; supplier and price come fro
     expect((float) $orderItem->estimated_price)->toBe(12500.0);
 });
 
-it('ignores supplier_id / estimated_price sent by the client', function () {
+it('uses the supplier Dapur picked but ignores estimated_price sent by the client', function () {
     $dapur = makeDapur();
     $supplier = makeSupplier();
     $otherSupplier = makeSupplier();
@@ -46,8 +46,35 @@ it('ignores supplier_id / estimated_price sent by the client', function () {
     ])->assertSessionHasNoErrors();
 
     $orderItem = Order::where('dapur_id', $dapur->id)->firstOrFail()->orderItems()->firstOrFail();
-    expect($orderItem->supplier_id)->toBe($supplier->id);
+    expect($orderItem->supplier_id)->toBe($otherSupplier->id);
     expect((float) $orderItem->estimated_price)->toBe(5000.0);
+});
+
+it('accepts an item without a default supplier when Dapur picks one', function () {
+    $dapur = makeDapur();
+    $supplier = makeSupplier();
+    $item = makeItem(['category' => 'DRY_GOODS', 'default_supplier_id' => null]);
+    $dapurUser = makeUserWithRole('dapur', ['dapur_id' => $dapur->id]);
+
+    $this->actingAs($dapurUser)->post(route('dapur.orders.store'), [
+        'delivery_date' => '2030-01-15',
+        'items' => [['item_id' => $item->id, 'qty_ordered' => 2, 'supplier_id' => $supplier->id]],
+    ])->assertSessionHasNoErrors();
+
+    expect(Order::firstOrFail()->orderItems()->firstOrFail()->supplier_id)->toBe($supplier->id);
+});
+
+it('rejects an unknown supplier', function () {
+    $dapur = makeDapur();
+    $item = makeItem(['default_supplier_id' => makeSupplier()->id]);
+    $dapurUser = makeUserWithRole('dapur', ['dapur_id' => $dapur->id]);
+
+    $this->actingAs($dapurUser)->post(route('dapur.orders.store'), [
+        'delivery_date' => '2030-01-15',
+        'items' => [['item_id' => $item->id, 'qty_ordered' => 2, 'supplier_id' => 999999]],
+    ])->assertSessionHasErrors('items.0.supplier_id');
+
+    expect(Order::count())->toBe(0);
 });
 
 it('rejects an item without a default supplier and creates no order', function () {

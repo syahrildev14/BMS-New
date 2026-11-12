@@ -35,6 +35,7 @@ interface TandaTerima {
   sj_number: string;
   shipment_date: string;
   dapur_name: string;
+  supplier_id: number;
   supplier_name: string;
   lines: { order_item_id: number; item_name: string; satuan: string | null; order_number: string; qty_ordered: number; last_cost_price: number }[];
 }
@@ -121,7 +122,7 @@ export default function PurchaseNoteForm({
     if (note) {
       form.put(route('purchasing.purchase-notes.update', note.id));
     } else if (isWet && tandaTerima) {
-      form.post(route('purchasing.purchase-notes.store-wet', tandaTerima.id));
+      form.post(route('purchasing.purchase-notes.store-wet', [tandaTerima.id, tandaTerima.supplier_id]));
     } else {
       form.post(route('purchasing.purchase-notes.store'));
     }
