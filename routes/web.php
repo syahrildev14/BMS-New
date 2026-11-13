@@ -110,6 +110,7 @@ Route::middleware(['auth'])->group(function () {
             ->name('purchase-orders.by-date');
         Route::post('purchase-orders/{purchaseOrder}/receive', [GudangPurchaseOrderController::class, 'receive'])->name('purchase-orders.receive');
         Route::get('stock', [StockController::class, 'index'])->name('stock.index');
+        Route::get('stock/{item}/history', [StockController::class, 'history'])->name('stock.history');
         Route::post('stock/{item}/opname', [StockController::class, 'opname'])->name('stock.opname');
     });
 

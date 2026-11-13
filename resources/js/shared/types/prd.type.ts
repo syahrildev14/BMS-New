@@ -309,7 +309,21 @@ export interface StockItemRow {
   sku: string;
   name: string;
   satuan: Satuan | null;
+  qty_in: number;
+  qty_out: number;
   qty_on_hand: number;
+}
+
+export interface StockMovementRow {
+  id: number;
+  date: string | null;
+  type: 'PURCHASE_IN' | 'ORDER_OUT' | 'OPNAME_ADJUST';
+  qty_in: number;
+  qty_out: number;
+  balance: number;
+  document: string;
+  party: string | null;
+  created_by: string | null;
 }
 
 export interface AppUser {
