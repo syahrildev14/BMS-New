@@ -31,11 +31,13 @@ const STATUS_VARIANT: Record<string, BadgeProps['variant']> = {
 export default function PurchasingPurchaseOrdersShow({ date, purchaseOrders }: { date: string; purchaseOrders: PurchaseOrder[] }) {
   const [reviewing, setReviewing] = useState<PurchaseOrder | null>(null);
   const [lines, setLines] = useState<EditableLine[]>([]);
+  const [poNumber, setPoNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
 
   const openReview = (po: PurchaseOrder) => {
     setReviewing(po);
+    setPoNumber(po.po_number);
     setLines(
       (po.items ?? []).map((line) => ({
         id: line.id,
@@ -51,26 +53,32 @@ export default function PurchasingPurchaseOrdersShow({ date, purchaseOrders }: {
     setLines((prev) => prev.map((line) => (line.id === id ? { ...line, ...patch } : line)));
   };
 
-  const saveChanges = () => {
+  const saveChanges = (onSaved?: () => void) => {
     if (!reviewing) return;
     setSaving(true);
     router.patch(
       route('purchasing.purchase-orders.update', reviewing.id),
-      { items: lines.map((l) => ({ id: l.id, qty_ordered: l.qty_ordered, unit_cost: l.unit_cost })) },
+      { po_number: poNumber, items: lines.map((l) => ({ id: l.id, qty_ordered: l.qty_ordered, unit_cost: l.unit_cost })) },
       {
+        preserveScroll: true,
         onFinish: () => setSaving(false),
+        onSuccess: () => onSaved?.(),
         onError: (errors) => errorAlert(Object.values(errors)[0] ?? 'Gagal menyimpan perubahan.'),
       },
     );
   };
 
+  // Simpan dulu (nomor PO, qty, harga) agar isian di dialog tidak hilang, baru kirim.
   const sendPO = () => {
     if (!reviewing) return;
-    setSending(true);
-    router.post(route('purchasing.purchase-orders.send', reviewing.id), undefined, {
-      onFinish: () => setSending(false),
-      onSuccess: () => setReviewing(null),
-      onError: (errors) => errorAlert(Object.values(errors)[0] ?? 'Gagal mengirim PO.'),
+    const id = reviewing.id;
+    saveChanges(() => {
+      setSending(true);
+      router.post(route('purchasing.purchase-orders.send', id), undefined, {
+        onFinish: () => setSending(false),
+        onSuccess: () => setReviewing(null),
+        onError: (errors) => errorAlert(Object.values(errors)[0] ?? 'Gagal mengirim PO.'),
+      });
     });
   };
 
@@ -137,6 +145,12 @@ export default function PurchasingPurchaseOrdersShow({ date, purchaseOrders }: {
           </DialogHeader>
 
           <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1 border-b border-gray-100 pb-3">
+              <Label>No. PO</Label>
+              <Input value={poNumber} maxLength={50} disabled={reviewing?.status !== 'DRAFT'} onChange={(e) => setPoNumber(e.target.value)} />
+              {reviewing?.status === 'DRAFT' && <p className="text-xs text-gray-400">Nomor otomatis dari sistem — boleh diganti sebelum PO dikirim.</p>}
+            </div>
+
             {lines.map((line) => (
               <div key={line.id} className="grid grid-cols-12 items-end gap-2 border-b border-gray-100 pb-3 last:border-0">
                 <div className="col-span-5 flex flex-col gap-1">
@@ -179,10 +193,10 @@ export default function PurchasingPurchaseOrdersShow({ date, purchaseOrders }: {
             </Button>
             {reviewing?.status === 'DRAFT' && (
               <>
-                <Button type="button" variant="outline" onClick={saveChanges} disabled={saving}>
+                <Button type="button" variant="outline" onClick={() => saveChanges()} disabled={saving || sending}>
                   {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
                 </Button>
-                <Button type="button" onClick={sendPO} disabled={sending}>
+                <Button type="button" onClick={sendPO} disabled={saving || sending}>
                   {sending ? 'Mengirim...' : 'Kirim ke Supplier'}
                 </Button>
               </>

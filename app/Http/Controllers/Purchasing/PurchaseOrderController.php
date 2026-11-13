@@ -7,6 +7,8 @@ use App\Models\PurchaseOrder;
 use App\Services\PurchaseOrderService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -45,19 +47,30 @@ class PurchaseOrderController extends Controller
     {
         abort_unless($purchaseOrder->status === 'DRAFT', 422, 'Hanya PO berstatus DRAFT yang bisa diedit.');
 
+        $request->merge(['po_number' => trim((string) $request->input('po_number'))]);
+
         $validated = $request->validate([
+            // Nomor otomatis hanya usulan; Purchasing boleh menggantinya selama masih DRAFT.
+            'po_number' => ['required', 'string', 'max:50', Rule::unique('purchase_orders', 'po_number')->ignore($purchaseOrder->id)],
             'items' => ['required', 'array', 'min:1'],
             'items.*.id' => ['required', 'integer', 'exists:purchase_order_items,id'],
             'items.*.qty_ordered' => ['required', 'numeric', 'min:0.01'],
             'items.*.unit_cost' => ['required', 'numeric', 'min:0'],
+        ], [
+            'po_number.required' => 'Nomor PO wajib diisi.',
+            'po_number.unique' => 'Nomor PO sudah dipakai PO lain.',
         ]);
 
-        foreach ($validated['items'] as $line) {
-            $purchaseOrder->items()->whereKey($line['id'])->update([
-                'qty_ordered' => $line['qty_ordered'],
-                'unit_cost' => $line['unit_cost'],
-            ]);
-        }
+        DB::transaction(function () use ($purchaseOrder, $validated) {
+            $purchaseOrder->update(['po_number' => $validated['po_number']]);
+
+            foreach ($validated['items'] as $line) {
+                $purchaseOrder->items()->whereKey($line['id'])->update([
+                    'qty_ordered' => $line['qty_ordered'],
+                    'unit_cost' => $line['unit_cost'],
+                ]);
+            }
+        });
 
         return back()->with('success', 'Draft PO berhasil diperbarui.');
     }

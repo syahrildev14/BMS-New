@@ -62,7 +62,9 @@ class PurchaseOrderService
             $sequence = PurchaseOrder::where('supplier_id', $supplier->id)
                 ->whereDate('created_at', now()->toDateString())
                 ->lockForUpdate()
-                ->count() + 1;
+                ->count() + $attempt;
+            // + $attempt (bukan + 1): nomor PO bisa diubah manual, jadi nomor
+            // urut berikutnya mungkin sudah terpakai — coba nomor setelahnya.
 
             try {
                 return PurchaseOrder::create([
