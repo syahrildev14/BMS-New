@@ -313,3 +313,71 @@ it('takes one wet nota per supplier on a combined Tanda Terima', function () {
     $this->actingAs($this->purchasing)->get(route('purchasing.purchase-notes.index'))
         ->assertInertia(fn ($page) => $page->has('pendingTandaTerima', 0));
 });
+
+it('stores an optional nota file, replaces it on correction and removes it on request', function () {
+    $supplier = makeSupplier();
+    $beras = makeItem(['category' => 'DRY_GOODS']);
+    $payload = [
+        'supplier_id' => $supplier->id,
+        'note_date' => '2030-01-11',
+        'items' => [['item_id' => $beras->id, 'qty' => 2, 'unit_price' => 13000]],
+    ];
+
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store'), $payload + [
+        'attachment' => \Illuminate\Http\UploadedFile::fake()->image('nota-toko.jpg'),
+    ])->assertSessionHasNoErrors();
+
+    $note = PurchaseNote::firstOrFail();
+    $firstPath = $note->attachment_path;
+    expect($note->attachment_name)->toBe('nota-toko.jpg');
+    Storage::disk('local')->assertExists($firstPath);
+    expect($note->toArray())->not->toHaveKey('attachment_path');
+
+    $this->actingAs($this->purchasing)->get(route('purchasing.purchase-notes.attachment', $note))->assertOk();
+
+    // Multipart correction arrives as POST + _method=PUT.
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.update', $note), $payload + [
+        '_method' => 'PUT',
+        'attachment' => \Illuminate\Http\UploadedFile::fake()->create('nota.pdf', 100, 'application/pdf'),
+    ])->assertSessionHasNoErrors();
+
+    $note->refresh();
+    expect($note->attachment_name)->toBe('nota.pdf');
+    Storage::disk('local')->assertMissing($firstPath);
+    Storage::disk('local')->assertExists($note->attachment_path);
+
+    // Correction without a file keeps the current one.
+    $this->actingAs($this->purchasing)->put(route('purchasing.purchase-notes.update', $note), $payload)->assertSessionHasNoErrors();
+    expect($note->fresh()->attachment_name)->toBe('nota.pdf');
+
+    $secondPath = $note->attachment_path;
+    $this->actingAs($this->purchasing)->put(route('purchasing.purchase-notes.update', $note), $payload + ['remove_attachment' => true])
+        ->assertSessionHasNoErrors();
+
+    expect($note->fresh()->attachment_name)->toBeNull();
+    Storage::disk('local')->assertMissing($secondPath);
+    $this->actingAs($this->purchasing)->get(route('purchasing.purchase-notes.attachment', $note))->assertNotFound();
+});
+
+it('rejects a non-image/pdf nota file and leaves no file behind when the nota fails', function () {
+    $supplier = makeSupplier();
+    $beras = makeItem(['category' => 'DRY_GOODS']);
+    $sayur = makeItem(['category' => 'WET_GOODS']);
+
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store'), [
+        'supplier_id' => $supplier->id,
+        'note_date' => '2030-01-11',
+        'items' => [['item_id' => $beras->id, 'qty' => 1, 'unit_price' => 1000]],
+        'attachment' => \Illuminate\Http\UploadedFile::fake()->create('virus.exe', 10),
+    ])->assertSessionHasErrors('attachment');
+
+    $this->actingAs($this->purchasing)->post(route('purchasing.purchase-notes.store'), [
+        'supplier_id' => $supplier->id,
+        'note_date' => '2030-01-11',
+        'items' => [['item_id' => $sayur->id, 'qty' => 1, 'unit_price' => 1000]],
+        'attachment' => \Illuminate\Http\UploadedFile::fake()->image('nota.png'),
+    ])->assertSessionHasErrors('items.0.item_id');
+
+    expect(PurchaseNote::count())->toBe(0);
+    expect(Storage::disk('local')->allFiles('purchase-notes'))->toBe([]);
+});

@@ -12,8 +12,10 @@ use App\Services\PurchaseNoteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Nota Pembelian: dry-goods shopping receipts (→ Gudang stock) and wet-goods
@@ -112,6 +114,27 @@ class PurchaseNoteController extends Controller
             ->with('success', "Nota {$note->note_number} berhasil dikoreksi.");
     }
 
+    /** Scan/photo/PDF of the physical nota, shown inline in the browser. */
+    public function attachment(PurchaseNote $purchaseNote): StreamedResponse
+    {
+        abort_unless($purchaseNote->attachment_path && Storage::disk('local')->exists($purchaseNote->attachment_path), 404);
+
+        return Storage::disk('local')->response($purchaseNote->attachment_path, $purchaseNote->attachment_name);
+    }
+
+    /**
+     * Optional nota file: images or PDF up to 5 MB.
+     *
+     * @return array<string, array<int, string>>
+     */
+    private function attachmentRules(): array
+    {
+        return [
+            'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
+            'remove_attachment' => ['sometimes', 'boolean'],
+        ];
+    }
+
     private function renderForm(?PurchaseNote $note, ?SuratJalan $tandaTerima, ?string $editBlockReason = null, ?Supplier $supplier = null): Response
     {
         $note?->load('items');
@@ -158,7 +181,7 @@ class PurchaseNoteController extends Controller
             'items.*.item_id' => ['required', 'integer', 'exists:items,id'],
             'items.*.qty' => ['required', 'numeric', 'min:0.01', 'max:99999999.99'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0.01', 'max:9999999999.99'],
-        ]);
+        ] + $this->attachmentRules());
     }
 
     /**
@@ -175,6 +198,6 @@ class PurchaseNoteController extends Controller
             'items.*.qty' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
             // Required by the service when qty > 0.
             'items.*.unit_price' => ['nullable', 'numeric', 'min:0', 'max:9999999999.99'],
-        ]);
+        ] + $this->attachmentRules());
     }
 }

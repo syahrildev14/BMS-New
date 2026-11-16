@@ -23,8 +23,13 @@ class PurchaseNote extends Model
         'total_amount',
         'has_discrepancy',
         'notes',
+        'attachment_path',
+        'attachment_name',
         'created_by',
     ];
+
+    /** Internal storage path; the file is served through a route. */
+    protected $hidden = ['attachment_path'];
 
     protected function casts(): array
     {

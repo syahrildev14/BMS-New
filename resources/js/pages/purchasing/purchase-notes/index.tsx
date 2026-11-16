@@ -1,5 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
 import type { ReactElement } from 'react';
+import { Paperclip } from 'lucide-react';
 import { AppLayout } from '@/layouts/AppLayout';
 import { PageHeader } from '@/shared/components/layout/PageHeader';
 import { Badge } from '@/shared/components/ui/badge';
@@ -15,6 +16,7 @@ interface NoteRow {
   id: number;
   note_number: string;
   reference_number: string | null;
+  attachment_name: string | null;
   category: 'DRY_GOODS' | 'WET_GOODS';
   note_date: string;
   total_amount: string;
@@ -111,6 +113,17 @@ export default function PurchaseNotesIndex({ notes, pendingTandaTerima }: { note
                 <TableCell className="font-medium">
                   {note.note_number}
                   {note.reference_number && <div className="text-xs text-gray-400">Nota fisik: {note.reference_number}</div>}
+                  {note.attachment_name && (
+                    <a
+                      href={route('purchasing.purchase-notes.attachment', note.id)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={note.attachment_name}
+                      className="inline-flex items-center gap-1 text-xs font-normal text-primary-text hover:underline"
+                    >
+                      <Paperclip className="h-3 w-3" /> Lihat file
+                    </a>
+                  )}
                 </TableCell>
                 <TableCell>{note.note_date}</TableCell>
                 <TableCell>{note.category === 'DRY_GOODS' ? 'Kering' : `Basah (${note.surat_jalan?.sj_number ?? '-'})`}</TableCell>

@@ -101,6 +101,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('purchase-notes/tanda-terima/{suratJalan}/supplier/{supplier}', [PurchaseNoteController::class, 'storeWet'])->name('purchase-notes.store-wet');
         Route::get('purchase-notes/{purchaseNote}/edit', [PurchaseNoteController::class, 'edit'])->name('purchase-notes.edit');
         Route::put('purchase-notes/{purchaseNote}', [PurchaseNoteController::class, 'update'])->name('purchase-notes.update');
+        Route::get('purchase-notes/{purchaseNote}/attachment', [PurchaseNoteController::class, 'attachment'])->name('purchase-notes.attachment');
     });
 
     Route::prefix('gudang')->name('gudang.')->middleware('permission:stock.manage')->group(function () {

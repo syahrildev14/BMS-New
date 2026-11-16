@@ -1,6 +1,6 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { type FormEventHandler, type ReactElement, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Paperclip, Trash2 } from 'lucide-react';
 import { AppLayout } from '@/layouts/AppLayout';
 import { PageHeader } from '@/shared/components/layout/PageHeader';
 import { Button } from '@/shared/components/ui/button';
@@ -27,6 +27,7 @@ interface Note {
   note_date: string;
   reference_number: string | null;
   notes: string | null;
+  attachment_name: string | null;
   items: NoteItem[];
 }
 
@@ -101,6 +102,8 @@ export default function PurchaseNoteForm({
     note_date: note?.note_date ?? today,
     reference_number: note?.reference_number ?? '',
     notes: note?.notes ?? '',
+    attachment: null as File | null,
+    remove_attachment: false as boolean,
     items: [] as { item_id?: number; order_item_id?: number | null; qty: string; unit_price: string }[],
   });
   const errors = form.errors as Record<string, string | undefined>;
@@ -117,9 +120,12 @@ export default function PurchaseNoteForm({
       ? lines.map((l) => ({ order_item_id: l.order_item_id, qty: l.qty, unit_price: l.unit_price }))
       : lines.filter((l) => l.item_id).map((l) => ({ item_id: Number(l.item_id), qty: l.qty, unit_price: l.unit_price }));
 
-    form.transform((data) => ({ ...data, items: payloadItems }));
+    // PHP can't parse multipart PUT bodies: send a file as POST + _method.
+    form.transform((data) => ({ ...data, items: payloadItems, ...(note && data.attachment ? { _method: 'put' } : {}) }));
 
-    if (note) {
+    if (note && form.data.attachment) {
+      form.post(route('purchasing.purchase-notes.update', note.id));
+    } else if (note) {
       form.put(route('purchasing.purchase-notes.update', note.id));
     } else if (isWet && tandaTerima) {
       form.post(route('purchasing.purchase-notes.store-wet', [tandaTerima.id, tandaTerima.supplier_id]));
@@ -181,6 +187,50 @@ export default function PurchaseNoteForm({
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="notes">Catatan (opsional)</Label>
             <Input id="notes" value={form.data.notes} onChange={(e) => form.setData('notes', e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label htmlFor="attachment">File Nota (opsional)</Label>
+            {note?.attachment_name && !form.data.remove_attachment && !form.data.attachment && (
+              <div className="flex items-center gap-3 text-sm">
+                <a
+                  href={route('purchasing.purchase-notes.attachment', note.id)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 font-medium text-primary-text hover:underline"
+                >
+                  <Paperclip className="h-4 w-4" />
+                  {note.attachment_name}
+                </a>
+                {!readOnly && (
+                  <button type="button" className="text-xs text-red-500 hover:underline" onClick={() => form.setData('remove_attachment', true)}>
+                    Hapus file
+                  </button>
+                )}
+              </div>
+            )}
+            {note?.attachment_name && form.data.remove_attachment && (
+              <p className="text-xs text-amber-700">
+                File {note.attachment_name} akan dihapus saat disimpan.{' '}
+                <button type="button" className="underline" onClick={() => form.setData('remove_attachment', false)}>
+                  Batal
+                </button>
+              </p>
+            )}
+            {!readOnly && (
+              <Input
+                id="attachment"
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp,.pdf"
+                onChange={(e) => form.setData('attachment', e.target.files?.[0] ?? null)}
+              />
+            )}
+            {!readOnly && (
+              <p className="text-xs text-gray-500">
+                Foto/scan nota fisik (JPG, PNG, WEBP, atau PDF, maks. 5 MB).{note?.attachment_name ? ' File baru menggantikan file lama.' : ''}
+              </p>
+            )}
+            {readOnly && !note?.attachment_name && <p className="text-sm text-gray-400">Tidak ada file.</p>}
+            {errors.attachment && <p className="text-xs text-red-500">{errors.attachment}</p>}
           </div>
         </fieldset>
 

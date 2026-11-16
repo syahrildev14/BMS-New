@@ -14,9 +14,12 @@ use App\Models\StockMovement;
 use App\Models\SuratJalan;
 use App\Models\User;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * Nota Pembelian (purchase receipts) and the dry-goods shopping list.
@@ -95,8 +98,8 @@ class PurchaseNoteService
      */
     public function createDryNote(array $data, User $user): PurchaseNote
     {
-        return DB::transaction(function () use ($data, $user) {
-            $note = $this->createWithUniqueNumber([
+        return $this->withAttachment($data['attachment'] ?? null, fn (array $attachment) => DB::transaction(function () use ($data, $user, $attachment) {
+            $note = $this->createWithUniqueNumber($attachment + [
                 'category' => 'DRY_GOODS',
                 'supplier_id' => $data['supplier_id'],
                 'note_date' => $data['note_date'],
@@ -108,7 +111,7 @@ class PurchaseNoteService
             $this->applyDryLines($note, $data['items'], $user);
 
             return $note->refresh();
-        });
+        }));
     }
 
     /**
@@ -116,7 +119,7 @@ class PurchaseNoteService
      */
     public function createWetNote(SuratJalan $tandaTerima, int $supplierId, array $data, User $user): PurchaseNote
     {
-        return DB::transaction(function () use ($tandaTerima, $supplierId, $data, $user) {
+        return $this->withAttachment($data['attachment'] ?? null, fn (array $attachment) => DB::transaction(function () use ($tandaTerima, $supplierId, $data, $user, $attachment) {
             $tandaTerima = SuratJalan::whereKey($tandaTerima->id)->lockForUpdate()->firstOrFail();
 
             if ($tandaTerima->document_type !== SuratJalan::TANDA_TERIMA) {
@@ -140,7 +143,7 @@ class PurchaseNoteService
 
             $this->billing->voidDrafts($lines);
 
-            $note = $this->createWithUniqueNumber([
+            $note = $this->createWithUniqueNumber($attachment + [
                 'category' => 'WET_GOODS',
                 'supplier_id' => $supplierId,
                 'surat_jalan_id' => $tandaTerima->id,
@@ -154,7 +157,7 @@ class PurchaseNoteService
             $this->applyWetLines($note, $tandaTerima, $data['items'], $user);
 
             return $note->refresh();
-        });
+        }));
     }
 
     /**
@@ -166,53 +169,98 @@ class PurchaseNoteService
      */
     public function updateNote(PurchaseNote $note, array $data, User $user): PurchaseNote
     {
-        return DB::transaction(function () use ($note, $data, $user) {
-            $note = PurchaseNote::whereKey($note->id)->lockForUpdate()->firstOrFail();
-            $before = $note->load('items')->toArray();
+        $oldAttachment = null;
 
-            // Same row lock as StockService::consumeFifo(), so a shipment
-            // can't consume these lots between the check and the delete.
-            StockLot::whereIn('purchase_note_item_id', $note->items()->pluck('id'))->lockForUpdate()->get();
+        // Plain closure, not fn(): an arrow function would capture $oldAttachment by value.
+        $note = $this->withAttachment($data['attachment'] ?? null, function (array $attachment) use ($note, $data, $user, &$oldAttachment) {
+            return DB::transaction(function () use ($note, $data, $user, $attachment, &$oldAttachment) {
+                $note = PurchaseNote::whereKey($note->id)->lockForUpdate()->firstOrFail();
+                $before = $note->load('items')->toArray();
 
-            $this->assertEditable($note);
+                // A new file or an explicit removal replaces the current one.
+                if ($attachment !== [] || ! empty($data['remove_attachment'])) {
+                    $oldAttachment = $note->attachment_path;
+                    $attachment += ['attachment_path' => null, 'attachment_name' => null];
+                }
 
-            $note->update([
-                'reference_number' => $data['reference_number'] ?? null,
-                'notes' => $data['notes'] ?? null,
-            ] + ($note->category === 'DRY_GOODS' ? [
-                'supplier_id' => $data['supplier_id'],
-                'note_date' => $data['note_date'],
-            ] : []));
+                // Same row lock as StockService::consumeFifo(), so a shipment
+                // can't consume these lots between the check and the delete.
+                StockLot::whereIn('purchase_note_item_id', $note->items()->pluck('id'))->lockForUpdate()->get();
 
-            if ($note->category === 'DRY_GOODS') {
-                $itemIds = $note->items()->pluck('id');
-                StockMovement::where('reference_type', PurchaseNoteItem::class)->whereIn('reference_id', $itemIds)->delete();
-                StockLot::whereIn('purchase_note_item_id', $itemIds)->delete();
-                $note->items()->delete();
+                $this->assertEditable($note);
 
-                $this->applyDryLines($note, $data['items'], $user);
-            } else {
-                $this->billing->voidDrafts($note->suratJalan->orderItems()->where('supplier_id', $note->supplier_id)->get(['order_id', 'supplier_id']));
+                $note->update($attachment + [
+                    'reference_number' => $data['reference_number'] ?? null,
+                    'notes' => $data['notes'] ?? null,
+                ] + ($note->category === 'DRY_GOODS' ? [
+                    'supplier_id' => $data['supplier_id'],
+                    'note_date' => $data['note_date'],
+                ] : []));
 
-                // Undo this nota's prices: a line the correction reports as
-                // undelivered must not keep a price it no longer has a nota for.
-                OrderItem::whereIn('id', $note->items()->where('qty', '>', 0)->whereNotNull('order_item_id')->select('order_item_id'))
-                    ->update(['final_cost_price' => null, 'final_selling_price' => null]);
+                if ($note->category === 'DRY_GOODS') {
+                    $itemIds = $note->items()->pluck('id');
+                    StockMovement::where('reference_type', PurchaseNoteItem::class)->whereIn('reference_id', $itemIds)->delete();
+                    StockLot::whereIn('purchase_note_item_id', $itemIds)->delete();
+                    $note->items()->delete();
 
-                $note->items()->delete();
-                $this->applyWetLines($note, $note->suratJalan, $data['items'], $user);
-            }
+                    $this->applyDryLines($note, $data['items'], $user);
+                } else {
+                    $this->billing->voidDrafts($note->suratJalan->orderItems()->where('supplier_id', $note->supplier_id)->get(['order_id', 'supplier_id']));
 
-            AuditLog::create([
-                'user_id' => $user->id,
-                'action' => 'PURCHASE_NOTE_UPDATED',
-                'description' => "Nota {$note->note_number} dikoreksi.",
-                'old_data' => $before,
-                'new_data' => $note->refresh()->load('items')->toArray(),
-            ]);
+                    // Undo this nota's prices: a line the correction reports as
+                    // undelivered must not keep a price it no longer has a nota for.
+                    OrderItem::whereIn('id', $note->items()->where('qty', '>', 0)->whereNotNull('order_item_id')->select('order_item_id'))
+                        ->update(['final_cost_price' => null, 'final_selling_price' => null]);
 
-            return $note;
+                    $note->items()->delete();
+                    $this->applyWetLines($note, $note->suratJalan, $data['items'], $user);
+                }
+
+                AuditLog::create([
+                    'user_id' => $user->id,
+                    'action' => 'PURCHASE_NOTE_UPDATED',
+                    'description' => "Nota {$note->note_number} dikoreksi.",
+                    'old_data' => $before,
+                    'new_data' => $note->refresh()->load('items')->toArray(),
+                ]);
+
+                return $note;
+            });
         });
+
+        // Only after commit: a rolled-back correction keeps its old file.
+        if ($oldAttachment !== null) {
+            Storage::disk('local')->delete($oldAttachment);
+        }
+
+        return $note;
+    }
+
+    /**
+     * Stores the optional nota file before $callback runs and deletes it again
+     * if $callback fails, so a rejected nota leaves no orphan file behind.
+     *
+     * @param  callable(array<string, string>): PurchaseNote  $callback  receives the attachment columns ([] without a file)
+     */
+    private function withAttachment(?UploadedFile $file, callable $callback): PurchaseNote
+    {
+        if ($file === null) {
+            return $callback([]);
+        }
+
+        $path = $file->store('purchase-notes', 'local');
+
+        if ($path === false) {
+            throw ValidationException::withMessages(['attachment' => 'File nota gagal disimpan, coba lagi.']);
+        }
+
+        try {
+            return $callback(['attachment_path' => $path, 'attachment_name' => $file->getClientOriginalName()]);
+        } catch (Throwable $e) {
+            Storage::disk('local')->delete($path);
+
+            throw $e;
+        }
     }
 
     public function editBlockReason(PurchaseNote $note): ?string
