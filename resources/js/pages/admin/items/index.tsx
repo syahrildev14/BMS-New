@@ -6,6 +6,7 @@ import { PageHeader } from '@/shared/components/layout/PageHeader';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { Checkbox } from '@/shared/components/ui/checkbox';
+import { CurrencyInput } from '@/shared/components/ui/currency-input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog';
 import { FieldError } from '@/shared/components/ui/field-error';
 import { Input } from '@/shared/components/ui/input';
@@ -17,6 +18,7 @@ import { TablePagination } from '@/shared/components/ui/table-pagination';
 import { TableSearchInput } from '@/shared/components/ui/table-search-input';
 import { useTableControls, type TableColumn } from '@/shared/hooks/use-table-controls';
 import { confirmDelete } from '@/shared/lib/alerts';
+import { formatQty, formatRupiah } from '@/shared/lib/format';
 import type { Item, Satuan, Supplier } from '@/shared/types/prd.type';
 
 const columns: TableColumn<Item>[] = [
@@ -25,6 +27,7 @@ const columns: TableColumn<Item>[] = [
   { key: 'category', accessor: (item) => item.category },
   { key: 'satuan', accessor: (item) => item.satuan?.name },
   { key: 'supplier', accessor: (item) => item.default_supplier?.name },
+  { key: 'margin', accessor: (item) => Number(item.margin_value) },
   { key: 'status', accessor: (item) => (item.is_active ? 'Aktif' : 'Nonaktif') },
 ];
 
@@ -125,6 +128,7 @@ export default function AdminItemsIndex({ items, suppliers, satuans }: { items: 
             <SortableTableHead label="Kategori" columnKey="category" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Satuan" columnKey="satuan" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Supplier Default" columnKey="supplier" sort={sort} onSort={toggleSort} />
+            <SortableTableHead label="Nilai Margin" columnKey="margin" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Status" columnKey="status" sort={sort} onSort={toggleSort} />
             <TableHead className="text-right">Aksi</TableHead>
           </TableRow>
@@ -132,7 +136,7 @@ export default function AdminItemsIndex({ items, suppliers, satuans }: { items: 
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={8} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={9} className="h-32 text-center text-gray-400">
                 {items.length === 0 ? 'Belum ada barang.' : 'Tidak ada barang yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
@@ -147,6 +151,9 @@ export default function AdminItemsIndex({ items, suppliers, satuans }: { items: 
                 </TableCell>
                 <TableCell>{item.satuan?.name ?? '-'}</TableCell>
                 <TableCell>{item.default_supplier?.name ?? '-'}</TableCell>
+                <TableCell className="whitespace-nowrap">
+                  {item.margin_type === 'PERCENTAGE' ? `${formatQty(item.margin_value)}%` : formatRupiah(item.margin_value)}
+                </TableCell>
                 <TableCell>
                   <Badge variant={item.is_active ? 'success' : 'default'}>{item.is_active ? 'Aktif' : 'Nonaktif'}</Badge>
                 </TableCell>
@@ -268,13 +275,17 @@ export default function AdminItemsIndex({ items, suppliers, satuans }: { items: 
 
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="margin_value">Nilai Margin</Label>
-                <Input
-                  id="margin_value"
-                  type="number"
-                  step="0.01"
-                  value={form.data.margin_value}
-                  onChange={(e) => form.setData('margin_value', e.target.value)}
-                />
+                {form.data.margin_type === 'FIXED_IDR' ? (
+                  <CurrencyInput id="margin_value" value={form.data.margin_value} onValueChange={(raw) => form.setData('margin_value', raw)} />
+                ) : (
+                  <Input
+                    id="margin_value"
+                    type="number"
+                    step="0.01"
+                    value={form.data.margin_value}
+                    onChange={(e) => form.setData('margin_value', e.target.value)}
+                  />
+                )}
                 <FieldError message={form.errors.margin_value} />
               </div>
             </div>

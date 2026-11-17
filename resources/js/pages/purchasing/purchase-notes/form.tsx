@@ -5,9 +5,11 @@ import { AppLayout } from '@/layouts/AppLayout';
 import { PageHeader } from '@/shared/components/layout/PageHeader';
 import { Button } from '@/shared/components/ui/button';
 import { Combobox } from '@/shared/components/ui/combobox';
+import { CurrencyInput } from '@/shared/components/ui/currency-input';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table';
+import { formatRupiahInput, normalizeRupiahValue } from '@/shared/lib/currency-input';
 import { formatQty, formatRupiah } from '@/shared/lib/format';
 
 type Mode = 'DRY_GOODS' | 'WET_GOODS';
@@ -266,13 +268,10 @@ export default function PurchaseNoteForm({
                         {errors[`items.${index}.qty`] && <p className="text-xs text-red-500">{errors[`items.${index}.qty`]}</p>}
                       </TableCell>
                       <TableCell>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <CurrencyInput
                           value={line.unit_price}
-                          placeholder={`terakhir ${ttLine.last_cost_price}`}
-                          onChange={(e) => updateLine(line.key, { unit_price: e.target.value })}
+                          placeholder={ttLine.last_cost_price ? `terakhir ${formatRupiahInput(normalizeRupiahValue(ttLine.last_cost_price))}` : undefined}
+                          onValueChange={(raw) => updateLine(line.key, { unit_price: raw })}
                         />
                         {errors[`items.${index}.unit_price`] && <p className="text-xs text-red-500">{errors[`items.${index}.unit_price`]}</p>}
                       </TableCell>
@@ -308,7 +307,7 @@ export default function PurchaseNoteForm({
                   </div>
                   <div className="col-span-2 flex flex-col gap-1">
                     <Label>Harga Satuan</Label>
-                    <Input type="number" min="0.01" step="0.01" value={line.unit_price} onChange={(e) => updateLine(line.key, { unit_price: e.target.value })} />
+                    <CurrencyInput value={line.unit_price} onValueChange={(raw) => updateLine(line.key, { unit_price: raw })} />
                     {errors[`items.${index}.unit_price`] && <p className="text-xs text-red-500">{errors[`items.${index}.unit_price`]}</p>}
                   </div>
                   <div className="col-span-2 flex flex-col gap-1">

@@ -5,6 +5,7 @@ import { PageHeader } from '@/shared/components/layout/PageHeader';
 import { Badge, type BadgeProps } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog';
+import { CurrencyInput } from '@/shared/components/ui/currency-input';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table';
@@ -174,13 +175,10 @@ export default function PurchasingPurchaseOrdersShow({ date, purchaseOrders }: {
                 </div>
                 <div className="col-span-4 flex flex-col gap-1">
                   <Label>Harga Satuan</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                  <CurrencyInput
                     value={line.unit_cost}
                     disabled={reviewing?.status !== 'DRAFT'}
-                    onChange={(e) => updateLine(line.id, { unit_cost: e.target.value })}
+                    onValueChange={(raw) => updateLine(line.id, { unit_cost: raw })}
                   />
                 </div>
               </div>

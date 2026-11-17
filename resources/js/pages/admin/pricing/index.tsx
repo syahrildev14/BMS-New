@@ -3,6 +3,7 @@ import { type FormEventHandler, type ReactElement, useState } from 'react';
 import { AppLayout } from '@/layouts/AppLayout';
 import { PageHeader } from '@/shared/components/layout/PageHeader';
 import { Button } from '@/shared/components/ui/button';
+import { CurrencyInput } from '@/shared/components/ui/currency-input';
 import { Input } from '@/shared/components/ui/input';
 import { SortableTableHead } from '@/shared/components/ui/sortable-table-head';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table';
@@ -114,14 +115,10 @@ export default function AdminPricingIndex({
                   {item.margin_type === 'PERCENTAGE' ? `${item.margin_value}%` : formatRupiah(item.margin_value)}
                 </TableCell>
                 <TableCell>
-                  <Input
-                    type="text"
-                    inputMode="numeric"
-                    className="w-32"
-                    value={costPrices[item.id] ? Number(costPrices[item.id]).toLocaleString('id-ID') : ''}
-                    onChange={(e) =>
-                      setCostPrices((prev) => ({ ...prev, [item.id]: e.target.value.replace(/\D/g, '') }))
-                    }
+                  <CurrencyInput
+                    className="w-40"
+                    value={costPrices[item.id]}
+                    onValueChange={(raw) => setCostPrices((prev) => ({ ...prev, [item.id]: raw }))}
                   />
                 </TableCell>
                 <TableCell>
