@@ -5,6 +5,9 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -30,5 +33,26 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // Tampilkan halaman error Inertia untuk request web. Saat APP_DEBUG aktif,
+        // error 500 tetap memakai halaman debug Laravel agar stack trace terlihat.
+        $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
+            $status = $response->getStatusCode();
+
+            if (! in_array($status, [401, 403, 404, 500, 503], true)
+                || ($status === 500 && config('app.debug'))
+                || $request->expectsJson()
+                || $request->is('api/*')) {
+                return $response;
+            }
+
+            try {
+                return Inertia::render('error', ['status' => $status])
+                    ->toResponse($request)
+                    ->setStatusCode($status);
+            } catch (Throwable) {
+                // Inertia/DB tidak tersedia (mis. database mati): pakai view Blade
+                // statis resources/views/errors/{status}.blade.php yang sudah ada di $response.
+                return $response;
+            }
+        });
     })->create();
