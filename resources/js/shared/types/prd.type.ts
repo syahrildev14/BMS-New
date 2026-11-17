@@ -312,6 +312,7 @@ export interface StockItemRow {
   qty_in: number;
   qty_out: number;
   qty_on_hand: number;
+  last_price: number | null;
 }
 
 export interface StockMovementRow {

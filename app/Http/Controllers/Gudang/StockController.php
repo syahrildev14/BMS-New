@@ -44,6 +44,18 @@ class StockController extends Controller
                 ->keyBy('item_id')
             : collect();
 
+        // Harga beli per satuan dari penerimaan pembelian terakhir (PO / Nota Belanja).
+        // Lot hasil Stock Opname diabaikan karena unit_cost-nya hanya salinan harga lama.
+        $lastPriceByItem = $gudang
+            ? StockLot::where('gudang_id', $gudang->id)
+                ->where(fn ($q) => $q->whereNotNull('purchase_order_item_id')->orWhereNotNull('purchase_note_item_id'))
+                ->orderBy('received_at')
+                ->orderBy('id')
+                ->get(['item_id', 'unit_cost'])
+                ->keyBy('item_id')
+                ->map(fn (StockLot $lot) => (float) $lot->unit_cost)
+            : collect();
+
         $items = Item::with('satuan')
             ->where('category', 'DRY_GOODS')
             ->orderBy('name')
@@ -56,6 +68,7 @@ class StockController extends Controller
                 'qty_in' => (float) ($movementsByItem[$item->id]->qty_in ?? 0),
                 'qty_out' => (float) ($movementsByItem[$item->id]->qty_out ?? 0),
                 'qty_on_hand' => (float) ($stockByItem[$item->id] ?? 0),
+                'last_price' => $lastPriceByItem[$item->id] ?? null,
             ]);
 
         return Inertia::render('gudang/stock/index', [

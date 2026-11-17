@@ -13,7 +13,7 @@ import { TablePagination } from '@/shared/components/ui/table-pagination';
 import { TableSearchInput } from '@/shared/components/ui/table-search-input';
 import { useTableControls, type TableColumn } from '@/shared/hooks/use-table-controls';
 import { errorAlert } from '@/shared/lib/alerts';
-import { formatQty } from '@/shared/lib/format';
+import { formatQty, formatRupiah } from '@/shared/lib/format';
 import type { Gudang, StockItemRow } from '@/shared/types/prd.type';
 
 const columns: TableColumn<StockItemRow>[] = [
@@ -22,6 +22,7 @@ const columns: TableColumn<StockItemRow>[] = [
   { key: 'qty_in', accessor: (row) => row.qty_in },
   { key: 'qty_out', accessor: (row) => row.qty_out },
   { key: 'qty_on_hand', accessor: (row) => row.qty_on_hand },
+  { key: 'last_price', accessor: (row) => row.last_price ?? 0 },
 ];
 
 export default function GudangStockIndex({ gudang, items }: { gudang: Gudang | null; items: StockItemRow[] }) {
@@ -72,13 +73,14 @@ export default function GudangStockIndex({ gudang, items }: { gudang: Gudang | n
             <SortableTableHead label="Barang Masuk" columnKey="qty_in" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Barang Keluar" columnKey="qty_out" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Stok Tersedia" columnKey="qty_on_hand" sort={sort} onSort={toggleSort} />
+            <SortableTableHead label="Harga Terakhir" columnKey="last_price" sort={sort} onSort={toggleSort} />
             <TableHead className="text-right">Aksi</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6}className="h-32 text-center text-gray-400">
+              <TableCell colSpan={7} className="h-32 text-center text-gray-400">
                 {items.length === 0 ? 'Belum ada barang DRY_GOODS.' : 'Tidak ada barang yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
@@ -94,6 +96,7 @@ export default function GudangStockIndex({ gudang, items }: { gudang: Gudang | n
                 <TableCell>
                   {row.qty_on_hand <= 0 ? <Badge variant="destructive">Kosong</Badge> : <Badge variant="success">{formatQty(row.qty_on_hand)}</Badge>}
                 </TableCell>
+                <TableCell className="whitespace-nowrap">{row.last_price !== null ? formatRupiah(row.last_price) : '-'}</TableCell>
                 <TableCell className="space-x-2 text-right whitespace-nowrap">
                   <Button variant="ghost" size="sm" asChild>
                     <Link href={route('gudang.stock.history', row.id)}>Riwayat</Link>
