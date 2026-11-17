@@ -51,14 +51,17 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
+        $oldPath = $user->avatar_path;
 
-        if ($user->avatar_path) {
-            Storage::disk('public')->delete($user->avatar_path);
-        }
-
+        // Simpan file baru dulu; file lama baru dihapus setelah path baru tersimpan,
+        // supaya user tidak tertinggal dengan path yang menunjuk file yang sudah hilang.
         $user->update([
             'avatar_path' => $validated['avatar']->store('avatars', 'public'),
         ]);
+
+        if ($oldPath) {
+            Storage::disk('public')->delete($oldPath);
+        }
 
         return to_route('profile.edit');
     }
@@ -88,10 +91,15 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
+        $avatarPath = $user->avatar_path;
 
         Auth::logout();
 
         $user->delete();
+
+        if ($avatarPath) {
+            Storage::disk('public')->delete($avatarPath);
+        }
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

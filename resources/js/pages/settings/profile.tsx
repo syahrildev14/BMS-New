@@ -49,19 +49,32 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
 
   const onAvatarSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // Kosongkan input agar memilih file yang sama lagi (mis. setelah gagal) tetap memicu onChange.
+    e.target.value = '';
     if (!file) return;
 
-    setPreviewUrl(URL.createObjectURL(file));
-    avatarForm.setData('avatar', file);
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+    avatarForm.clearErrors('avatar');
+    // setData() baru berlaku di render berikutnya, sedangkan post() mengirim data dari render
+    // saat ini (avatar masih null). transform() langsung berlaku, jadi file pasti ikut terkirim.
+    avatarForm.transform(() => ({ avatar: file }));
     avatarForm.post(route('profile.avatar.update'), {
       forceFormData: true,
-      onFinish: () => setPreviewUrl(null),
+      preserveScroll: true,
+      onFinish: () => {
+        setPreviewUrl(null);
+        URL.revokeObjectURL(objectUrl);
+      },
     });
   };
 
   const removeAvatar = async () => {
     const ok = await confirmDelete({ title: 'Hapus foto profil?', text: 'Foto profil akan dikembalikan ke inisial nama.' });
-    if (ok) avatarForm.delete(route('profile.avatar.destroy'));
+    if (ok) {
+      avatarForm.transform((data) => data);
+      avatarForm.delete(route('profile.avatar.destroy'), { preserveScroll: true });
+    }
   };
 
   const submitDelete: FormEventHandler = (e) => {
@@ -92,7 +105,7 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                 {avatarForm.processing ? 'Mengunggah...' : 'Ganti Foto'}
               </Button>
               {auth.user.avatar_url && (
-                <Button type="button" variant="ghost" size="sm" onClick={removeAvatar}>
+                <Button type="button" variant="ghost" size="sm" onClick={removeAvatar} disabled={avatarForm.processing}>
                   <Trash2 className="h-4 w-4" />
                   Hapus
                 </Button>
