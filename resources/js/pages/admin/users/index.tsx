@@ -117,6 +117,7 @@ export default function AdminUsersIndex({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="Nama" columnKey="name" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Email" columnKey="email" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Role" columnKey="role" sort={sort} onSort={toggleSort} />
@@ -128,13 +129,14 @@ export default function AdminUsersIndex({
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={7} className="h-32 text-center text-gray-400">
                 {users.length === 0 ? 'Belum ada pengguna.' : 'Tidak ada pengguna yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((user) => (
+            rows.map((user, index) => (
               <TableRow key={user.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{user.name}</TableCell>
                 <TableCell>{user.email}</TableCell>
                 <TableCell>

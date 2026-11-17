@@ -86,6 +86,7 @@ export default function FinanceSupplierBillsShow({ date, bills }: { date: string
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <TableHead>No. Bill</TableHead>
             <TableHead>Order</TableHead>
             <TableHead>Dapur</TableHead>
@@ -99,13 +100,14 @@ export default function FinanceSupplierBillsShow({ date, bills }: { date: string
         <TableBody>
           {bills.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={8} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={9} className="h-32 text-center text-gray-400">
                 Tidak ada bill pada tanggal ini.
               </TableCell>
             </TableRow>
           ) : (
-            bills.map((bill) => (
+            bills.map((bill, index) => (
               <TableRow key={bill.id}>
+                <TableCell className="text-gray-500">{index + 1}</TableCell>
                 <TableCell className="font-medium">{bill.bill_number}</TableCell>
                 <TableCell>{bill.order?.order_number}</TableCell>
                 <TableCell>{bill.dapur?.name}</TableCell>

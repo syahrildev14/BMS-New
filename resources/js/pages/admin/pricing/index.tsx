@@ -87,6 +87,7 @@ export default function AdminPricingIndex({
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-12">No.</TableHead>
               <SortableTableHead label="Item" columnKey="name" sort={sort} onSort={toggleSort} />
               <SortableTableHead label="Supplier Default" columnKey="supplier" sort={sort} onSort={toggleSort} />
               <SortableTableHead label="Margin" columnKey="margin" sort={sort} onSort={toggleSort} />
@@ -97,13 +98,14 @@ export default function AdminPricingIndex({
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="h-32 text-center text-gray-400">
+                <TableCell colSpan={6} className="h-32 text-center text-gray-400">
                   Tidak ada barang yang cocok dengan pencarian.
                 </TableCell>
               </TableRow>
             )}
-            {rows.map((item) => (
+            {rows.map((item, index) => (
               <TableRow key={item.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">
                   {item.name} ({item.satuan?.name})
                 </TableCell>

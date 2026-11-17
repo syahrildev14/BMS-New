@@ -55,6 +55,7 @@ export default function AdminAuditLogsIndex({ auditLogs }: { auditLogs: AuditLog
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="Waktu" columnKey="created_at" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="User" columnKey="user" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Action" columnKey="action" sort={sort} onSort={toggleSort} />
@@ -64,13 +65,14 @@ export default function AdminAuditLogsIndex({ auditLogs }: { auditLogs: AuditLog
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={5} className="h-32 text-center text-gray-400">
                 {auditLogs.length === 0 ? 'Belum ada aktivitas tercatat.' : 'Tidak ada yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((log) => (
+            rows.map((log, index) => (
               <TableRow key={log.id} className="cursor-pointer" onClick={() => setDetailLog(log)}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{log.created_at}</TableCell>
                 <TableCell>{log.user?.name ?? '-'}</TableCell>
                 <TableCell>{log.action}</TableCell>

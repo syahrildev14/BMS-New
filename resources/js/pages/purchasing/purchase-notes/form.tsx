@@ -239,6 +239,7 @@ export default function PurchaseNoteForm({
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">No.</TableHead>
                   <TableHead>Barang</TableHead>
                   <TableHead>Order</TableHead>
                   <TableHead className="text-right">Qty Pesan</TableHead>
@@ -253,6 +254,7 @@ export default function PurchaseNoteForm({
                   const differs = Number(line.qty || 0) !== ttLine.qty_ordered;
                   return (
                     <TableRow key={ttLine.order_item_id} className={differs ? 'bg-amber-50' : ''}>
+                      <TableCell className="text-gray-500">{index + 1}</TableCell>
                       <TableCell className="font-medium">{ttLine.item_name}</TableCell>
                       <TableCell className="text-xs">{ttLine.order_number}</TableCell>
                       <TableCell className="text-right">

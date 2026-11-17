@@ -88,6 +88,7 @@ export default function AdminSatuansIndex({ satuans }: { satuans: Satuan[] }) {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="Kode" columnKey="code" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Nama" columnKey="name" sort={sort} onSort={toggleSort} />
             <TableHead className="text-right">Aksi</TableHead>
@@ -96,13 +97,14 @@ export default function AdminSatuansIndex({ satuans }: { satuans: Satuan[] }) {
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={3} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={4} className="h-32 text-center text-gray-400">
                 {satuans.length === 0 ? 'Belum ada satuan.' : 'Tidak ada satuan yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((satuan) => (
+            rows.map((satuan, index) => (
               <TableRow key={satuan.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{satuan.code}</TableCell>
                 <TableCell>{satuan.name}</TableCell>
                 <TableCell className="text-right">

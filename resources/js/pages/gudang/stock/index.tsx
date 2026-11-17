@@ -57,7 +57,7 @@ export default function GudangStockIndex({ gudang, items }: { gudang: Gudang | n
 
       <PageHeader
         title="Stok Barang Gudang"
-        description={gudang ? `Saldo stok DRY_GOODS saat ini di ${gudang.name}, dihitung dari lot pembelian yang belum habis terpakai (FIFO).` : 'Belum ada Gudang terdaftar.'}
+        description={gudang ? `Saldo stok barang Kering saat ini di ${gudang.name}, dihitung dari lot pembelian yang belum habis terpakai (FIFO).` : 'Belum ada Gudang terdaftar.'}
         breadcrumbs={[{ label: 'Gudang' }, { label: 'Stok Barang' }]}
       />
 
@@ -68,6 +68,7 @@ export default function GudangStockIndex({ gudang, items }: { gudang: Gudang | n
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="SKU" columnKey="sku" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Nama Barang" columnKey="name" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Barang Masuk" columnKey="qty_in" sort={sort} onSort={toggleSort} />
@@ -80,13 +81,14 @@ export default function GudangStockIndex({ gudang, items }: { gudang: Gudang | n
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="h-32 text-center text-gray-400">
-                {items.length === 0 ? 'Belum ada barang DRY_GOODS.' : 'Tidak ada barang yang cocok dengan pencarian.'}
+              <TableCell colSpan={8} className="h-32 text-center text-gray-400">
+                {items.length === 0 ? 'Belum ada barang Kering.' : 'Tidak ada barang yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((row) => (
+            rows.map((row, index) => (
               <TableRow key={row.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{row.sku}</TableCell>
                 <TableCell>
                   {row.name} {row.satuan && <span className="text-gray-400">({row.satuan.name})</span>}

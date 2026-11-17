@@ -53,6 +53,7 @@ export default function DapurOrdersIndex({ orders }: { orders: Order[] }) {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="No. Order" columnKey="order_number" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Tanggal Kirim" columnKey="delivery_date" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Jumlah Item" columnKey="item_count" sort={sort} onSort={toggleSort} />
@@ -63,13 +64,14 @@ export default function DapurOrdersIndex({ orders }: { orders: Order[] }) {
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={5} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={6} className="h-32 text-center text-gray-400">
                 {orders.length === 0 ? 'Belum ada order.' : 'Tidak ada order yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((order) => (
+            rows.map((order, index) => (
               <TableRow key={order.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{order.order_number}</TableCell>
                 <TableCell>{order.delivery_date}</TableCell>
                 <TableCell>{order.order_items?.length ?? 0}</TableCell>

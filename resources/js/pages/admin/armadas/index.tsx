@@ -88,6 +88,7 @@ export default function AdminArmadasIndex({ armadas }: { armadas: Armada[] }) {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="Nama" columnKey="name" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="No. Polisi" columnKey="plate_number" sort={sort} onSort={toggleSort} />
             <TableHead>Status</TableHead>
@@ -97,13 +98,14 @@ export default function AdminArmadasIndex({ armadas }: { armadas: Armada[] }) {
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={5} className="h-32 text-center text-gray-400">
                 {armadas.length === 0 ? 'Belum ada armada.' : 'Tidak ada armada yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((armada) => (
+            rows.map((armada, index) => (
               <TableRow key={armada.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{armada.name}</TableCell>
                 <TableCell>{armada.plate_number}</TableCell>
                 <TableCell>{armada.is_active ? 'Aktif' : 'Nonaktif'}</TableCell>

@@ -160,7 +160,7 @@ class StockController extends Controller
 
     public function opname(Request $request, Item $item, StockService $service): RedirectResponse
     {
-        abort_unless($item->category === 'DRY_GOODS', 422, 'Stock Opname hanya berlaku untuk barang DRY_GOODS.');
+        abort_unless($item->category === 'DRY_GOODS', 422, 'Stock Opname hanya berlaku untuk barang Kering.');
 
         $validated = $request->validate([
             'physical_qty' => ['required', 'numeric', 'min:0'],

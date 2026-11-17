@@ -119,6 +119,7 @@ export default function AdminItemsIndex({ items, suppliers, satuans }: { items: 
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="SKU" columnKey="sku" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Nama" columnKey="name" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Kategori" columnKey="category" sort={sort} onSort={toggleSort} />
@@ -131,17 +132,18 @@ export default function AdminItemsIndex({ items, suppliers, satuans }: { items: 
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={8} className="h-32 text-center text-gray-400">
                 {items.length === 0 ? 'Belum ada barang.' : 'Tidak ada barang yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((item) => (
+            rows.map((item, index) => (
               <TableRow key={item.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{item.sku}</TableCell>
                 <TableCell>{item.name}</TableCell>
                 <TableCell>
-                  <Badge variant="outline">{item.category === 'DRY_GOODS' ? 'Dry Goods' : 'Wet Goods'}</Badge>
+                  <Badge variant="outline">{item.category === 'DRY_GOODS' ? 'Kering' : 'Basah'}</Badge>
                 </TableCell>
                 <TableCell>{item.satuan?.name ?? '-'}</TableCell>
                 <TableCell>{item.default_supplier?.name ?? '-'}</TableCell>
@@ -195,8 +197,8 @@ export default function AdminItemsIndex({ items, suppliers, satuans }: { items: 
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="DRY_GOODS">Dry Goods</SelectItem>
-                    <SelectItem value="WET_GOODS">Wet Goods</SelectItem>
+                    <SelectItem value="DRY_GOODS">Kering</SelectItem>
+                    <SelectItem value="WET_GOODS">Basah</SelectItem>
                   </SelectContent>
                 </Select>
                 <FieldError message={form.errors.category} />
@@ -243,7 +245,7 @@ export default function AdminItemsIndex({ items, suppliers, satuans }: { items: 
               </Select>
               {form.data.category === 'DRY_GOODS' && (
                 <p className="text-xs text-gray-400">
-                  Wajib untuk Dry Goods — dipakai untuk membuat draft PO otomatis kalau stok Gudang kurang.
+                  Wajib untuk barang Kering — dipakai untuk membuat draft PO otomatis kalau stok Gudang kurang.
                 </p>
               )}
               <FieldError message={form.errors.default_supplier_id} />

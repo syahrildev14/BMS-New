@@ -57,6 +57,7 @@ export default function OpsRevisionsIndex({ pendingApprovals }: { pendingApprova
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="Waktu Pengajuan" columnKey="created_at" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Order ID" columnKey="order_id" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Jumlah Item" columnKey="item_count" sort={sort} onSort={toggleSort} />
@@ -66,13 +67,14 @@ export default function OpsRevisionsIndex({ pendingApprovals }: { pendingApprova
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={5} className="h-32 text-center text-gray-400">
                 {pendingApprovals.length === 0 ? 'Tidak ada revisi yang menunggu approval.' : 'Tidak ada revisi yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((log) => (
+            rows.map((log, index) => (
               <TableRow key={log.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell>{log.created_at}</TableCell>
                 <TableCell className="font-medium">{log.new_data?.order_id}</TableCell>
                 <TableCell>{log.new_data?.items.length ?? 0}</TableCell>

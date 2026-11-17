@@ -90,6 +90,7 @@ export default function PurchaseNotesIndex({ notes, pendingTandaTerima }: { note
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="No. Nota" columnKey="note_number" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Tanggal" columnKey="note_date" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Jenis" columnKey="category" sort={sort} onSort={toggleSort} />
@@ -103,13 +104,14 @@ export default function PurchaseNotesIndex({ notes, pendingTandaTerima }: { note
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={8} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={9} className="h-32 text-center text-gray-400">
                 {notes.length === 0 ? 'Belum ada nota.' : 'Tidak ada nota yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((note) => (
+            rows.map((note, index) => (
               <TableRow key={note.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">
                   {note.note_number}
                   {note.reference_number && <div className="text-xs text-gray-400">Nota fisik: {note.reference_number}</div>}

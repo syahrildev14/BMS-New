@@ -98,6 +98,7 @@ export default function PurchasingPurchaseOrdersShow({ date, purchaseOrders }: {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <TableHead>No. PO</TableHead>
             <TableHead>Supplier</TableHead>
             <TableHead>Dari Order</TableHead>
@@ -108,13 +109,14 @@ export default function PurchasingPurchaseOrdersShow({ date, purchaseOrders }: {
         <TableBody>
           {purchaseOrders.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={5} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={6} className="h-32 text-center text-gray-400">
                 Tidak ada Purchase Order pada tanggal ini.
               </TableCell>
             </TableRow>
           ) : (
-            purchaseOrders.map((po) => (
+            purchaseOrders.map((po, index) => (
               <TableRow key={po.id}>
+                <TableCell className="text-gray-500">{index + 1}</TableCell>
                 <TableCell className="font-medium">{po.po_number}</TableCell>
                 <TableCell>{po.supplier?.name}</TableCell>
                 <TableCell>{po.triggered_by_order?.order_number ?? '-'}</TableCell>

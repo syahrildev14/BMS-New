@@ -82,6 +82,7 @@ export default function AdminDocumentTemplatesIndex({ templates }: { templates: 
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="Nama" columnKey="name" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Jenis" columnKey="document_type" sort={sort} onSort={toggleSort} />
             <TableHead>File</TableHead>
@@ -92,13 +93,14 @@ export default function AdminDocumentTemplatesIndex({ templates }: { templates: 
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={5} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={6} className="h-32 text-center text-gray-400">
                 {templates.length === 0 ? 'Belum ada template. Selama kosong, sistem memakai format PDF bawaan.' : 'Tidak ada template yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((template) => (
+            rows.map((template, index) => (
               <TableRow key={template.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{template.name}</TableCell>
                 <TableCell>{TYPE_LABEL[template.document_type]}</TableCell>
                 <TableCell>{template.original_filename}</TableCell>

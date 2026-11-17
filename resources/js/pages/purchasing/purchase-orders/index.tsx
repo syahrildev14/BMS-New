@@ -27,7 +27,7 @@ export default function PurchasingPurchaseOrdersIndex({ groups }: { groups: Purc
 
       <PageHeader
         title="Purchase Order"
-        description="PO yang otomatis terbit saat stok Gudang kurang untuk item DRY_GOODS — review, sesuaikan qty/harga bila perlu, lalu kirim ke Supplier."
+        description="PO yang otomatis terbit saat stok Gudang kurang untuk barang Kering — review, sesuaikan qty/harga bila perlu, lalu kirim ke Supplier."
         breadcrumbs={[{ label: 'Purchasing' }, { label: 'Purchase Order' }]}
       />
 
@@ -38,6 +38,7 @@ export default function PurchasingPurchaseOrdersIndex({ groups }: { groups: Purc
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="Tanggal Dibuat" columnKey="date" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Jumlah PO" columnKey="po_count" sort={sort} onSort={toggleSort} />
             <TableHead className="text-right">Aksi</TableHead>
@@ -46,13 +47,14 @@ export default function PurchasingPurchaseOrdersIndex({ groups }: { groups: Purc
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={3} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={4} className="h-32 text-center text-gray-400">
                 {groups.length === 0 ? 'Belum ada Purchase Order.' : 'Tidak ada tanggal yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((group) => (
+            rows.map((group, index) => (
               <TableRow key={group.date}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{group.date}</TableCell>
                 <TableCell>{group.po_count}</TableCell>
                 <TableCell className="text-right">

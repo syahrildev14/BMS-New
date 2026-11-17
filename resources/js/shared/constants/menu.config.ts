@@ -56,15 +56,6 @@ export const menuConfig: MenuItem[] = [
     ],
   },
   {
-    label: 'Ops',
-    icon: Truck,
-    children: [
-      { label: 'Pengiriman (SJ & TT)', href: '/ops/delivery-notes', permission: 'delivery-notes.manage' },
-      { label: 'Crosscheck H+1', href: '/ops/verifications', permission: 'delivery-verifications.manage' },
-      { label: 'Approval Revisi', href: '/ops/revisions', permission: 'revisions.approve' },
-    ],
-  },
-  {
     label: 'Purchasing',
     icon: ShoppingCart,
     children: [
@@ -80,6 +71,15 @@ export const menuConfig: MenuItem[] = [
     icon: Warehouse,
     children: [
       { label: 'Stok Barang', href: '/gudang/stock', permission: 'stock.manage' },
+    ],
+  },
+  {
+    label: 'Ops',
+    icon: Truck,
+    children: [
+      { label: 'Pengiriman (SJ & TT)', href: '/ops/delivery-notes', permission: 'delivery-notes.manage' },
+      { label: 'Crosscheck H+1', href: '/ops/verifications', permission: 'delivery-verifications.manage' },
+      { label: 'Approval Revisi', href: '/ops/revisions', permission: 'revisions.approve' },
     ],
   },
   {

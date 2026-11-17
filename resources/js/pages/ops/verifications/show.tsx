@@ -93,6 +93,7 @@ export default function VerificationShow({ document: doc }: { document: Verifica
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-12">No.</TableHead>
               <TableHead>Barang</TableHead>
               <TableHead>Supplier</TableHead>
               <TableHead>Order</TableHead>
@@ -104,8 +105,9 @@ export default function VerificationShow({ document: doc }: { document: Verifica
             </TableRow>
           </TableHeader>
           <TableBody>
-            {doc.lines.map((line) => (
+            {doc.lines.map((line, index) => (
               <TableRow key={line.id} className={lineDiffers(line) ? 'bg-amber-50 dark:bg-amber-950' : ''}>
+                <TableCell className="text-gray-500">{index + 1}</TableCell>
                 <TableCell className="font-medium">{line.item_name}</TableCell>
                 <TableCell>{line.supplier_name ?? '—'}</TableCell>
                 <TableCell className="text-xs">{line.order_number}</TableCell>

@@ -56,6 +56,7 @@ export default function GudangStockHistory({ item, movements }: Props) {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <TableHead>Tanggal</TableHead>
             <TableHead>Jenis</TableHead>
             <TableHead>Dokumen</TableHead>
@@ -69,13 +70,14 @@ export default function GudangStockHistory({ item, movements }: Props) {
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={8} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={9} className="h-32 text-center text-gray-400">
                 {movements.length === 0 ? 'Belum ada pergerakan stok untuk barang ini.' : 'Tidak ada data yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((row) => (
+            rows.map((row, index) => (
               <TableRow key={row.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="whitespace-nowrap">{row.date}</TableCell>
                 <TableCell>
                   <Badge variant={TYPE_LABEL[row.type].variant}>{TYPE_LABEL[row.type].label}</Badge>

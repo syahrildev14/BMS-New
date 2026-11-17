@@ -95,6 +95,7 @@ export default function AdminBankAccountsIndex({ bankAccounts }: { bankAccounts:
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="Bank" columnKey="bank_name" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="No. Rekening" columnKey="account_number" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Atas Nama" columnKey="account_holder" sort={sort} onSort={toggleSort} />
@@ -105,13 +106,14 @@ export default function AdminBankAccountsIndex({ bankAccounts }: { bankAccounts:
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={5} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={6} className="h-32 text-center text-gray-400">
                 {bankAccounts.length === 0 ? 'Belum ada rekening.' : 'Tidak ada rekening yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((account) => (
+            rows.map((account, index) => (
               <TableRow key={account.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{account.bank_name}</TableCell>
                 <TableCell>{account.account_number}</TableCell>
                 <TableCell>{account.account_holder}</TableCell>

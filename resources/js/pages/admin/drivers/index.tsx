@@ -84,6 +84,7 @@ export default function AdminDriversIndex({ drivers }: { drivers: Driver[] }) {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="Nama" columnKey="name" sort={sort} onSort={toggleSort} />
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Aksi</TableHead>
@@ -92,13 +93,14 @@ export default function AdminDriversIndex({ drivers }: { drivers: Driver[] }) {
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={3} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={4} className="h-32 text-center text-gray-400">
                 {drivers.length === 0 ? 'Belum ada driver.' : 'Tidak ada driver yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((driver) => (
+            rows.map((driver, index) => (
               <TableRow key={driver.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{driver.name}</TableCell>
                 <TableCell>{driver.is_active ? 'Aktif' : 'Nonaktif'}</TableCell>
                 <TableCell className="text-right">

@@ -151,6 +151,7 @@ export default function FinanceInvoicesIndex({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="Tanggal Diterima" columnKey="date" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Jumlah Invoice" columnKey="invoice_count" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Total Gabungan" columnKey="total_amount" sort={sort} onSort={toggleSort} />
@@ -160,13 +161,14 @@ export default function FinanceInvoicesIndex({
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={5} className="h-32 text-center text-gray-400">
                 {groups.length === 0 ? 'Belum ada invoice diterbitkan.' : 'Tidak ada tanggal yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((group) => (
+            rows.map((group, index) => (
               <TableRow key={group.date}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{group.date}</TableCell>
                 <TableCell>{group.invoice_count}</TableCell>
                 <TableCell>{formatRupiah(group.total_amount)}</TableCell>

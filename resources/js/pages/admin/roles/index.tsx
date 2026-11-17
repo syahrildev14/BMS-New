@@ -98,6 +98,7 @@ export default function AdminRolesIndex({ roles, permissions }: { roles: Role[];
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="Role" columnKey="name" sort={sort} onSort={toggleSort} />
             <TableHead>Permissions</TableHead>
             <TableHead className="text-right">Aksi</TableHead>
@@ -106,13 +107,14 @@ export default function AdminRolesIndex({ roles, permissions }: { roles: Role[];
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={3} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={4} className="h-32 text-center text-gray-400">
                 {roles.length === 0 ? 'Belum ada role.' : 'Tidak ada role yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((role) => (
+            rows.map((role, index) => (
               <TableRow key={role.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{role.name}</TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">

@@ -101,6 +101,7 @@ export default function FinanceInvoicesShow({ date, invoices }: { date: string; 
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <TableHead>No. Invoice</TableHead>
             <TableHead>Order</TableHead>
             <TableHead>Dapur</TableHead>
@@ -116,14 +117,15 @@ export default function FinanceInvoicesShow({ date, invoices }: { date: string; 
         <TableBody>
           {invoices.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={10} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={11} className="h-32 text-center text-gray-400">
                 Tidak ada invoice pada tanggal ini.
               </TableCell>
             </TableRow>
           ) : (
-            invoices.map((invoice) => (
+            invoices.map((invoice, index) => (
               <Fragment key={invoice.id}>
               <TableRow>
+                <TableCell className="text-gray-500">{index + 1}</TableCell>
                 <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
                 <TableCell>{invoice.order?.order_number}</TableCell>
                 <TableCell>{invoice.dapur?.name}</TableCell>
@@ -189,13 +191,14 @@ export default function FinanceInvoicesShow({ date, invoices }: { date: string; 
               </TableRow>
               {expandedId === invoice.id && (
                 <TableRow className="bg-gray-50 hover:bg-gray-50">
-                  <TableCell colSpan={10} className="p-3">
+                  <TableCell colSpan={11} className="p-3">
                     {invoice.lines.length === 0 ? (
                       <p className="text-sm text-gray-400">Belum ada barang dengan hasil STT.</p>
                     ) : (
                       <Table>
                         <TableHeader>
                           <TableRow>
+                            <TableHead className="w-12">No.</TableHead>
                             <TableHead>Barang</TableHead>
                             <TableHead className="text-right">Qty Pesan</TableHead>
                             <TableHead className="text-right">Qty Diterima</TableHead>
@@ -206,8 +209,9 @@ export default function FinanceInvoicesShow({ date, invoices }: { date: string; 
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {invoice.lines.map((line) => (
+                          {invoice.lines.map((line, lineIndex) => (
                             <TableRow key={line.id}>
+                              <TableCell className="text-gray-500">{lineIndex + 1}</TableCell>
                               <TableCell>{line.item_name}</TableCell>
                               <TableCell className="text-right">
                                 {formatQty(line.qty_ordered)} {line.satuan}

@@ -80,6 +80,7 @@ export default function GudangPurchaseOrdersShow({ date, purchaseOrders }: { dat
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <TableHead>No. PO</TableHead>
             <TableHead>Supplier</TableHead>
             <TableHead>Status</TableHead>
@@ -89,13 +90,14 @@ export default function GudangPurchaseOrdersShow({ date, purchaseOrders }: { dat
         <TableBody>
           {purchaseOrders.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={5} className="h-32 text-center text-gray-400">
                 Tidak ada PO pada tanggal ini.
               </TableCell>
             </TableRow>
           ) : (
-            purchaseOrders.map((po) => (
+            purchaseOrders.map((po, index) => (
               <TableRow key={po.id}>
+                <TableCell className="text-gray-500">{index + 1}</TableCell>
                 <TableCell className="font-medium">{po.po_number}</TableCell>
                 <TableCell>{po.supplier?.name}</TableCell>
                 <TableCell>

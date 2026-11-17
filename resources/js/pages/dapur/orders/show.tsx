@@ -223,6 +223,7 @@ export default function DapurOrdersShow({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12">No.</TableHead>
                 <TableHead>Item</TableHead>
                 <TableHead>Supplier</TableHead>
                 <TableHead>Qty Pesan</TableHead>
@@ -235,13 +236,14 @@ export default function DapurOrdersShow({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(order.order_items ?? []).map((orderItem) => {
+              {(order.order_items ?? []).map((orderItem, index) => {
                 const line = lines.find((l) => l.id === orderItem.id);
                 const editable = orderItem.surat_jalan_id !== null && line;
                 const noSjYet = orderItem.surat_jalan_id === null;
 
                 return (
                   <TableRow key={orderItem.id}>
+                    <TableCell className="text-gray-500">{index + 1}</TableCell>
                     <TableCell className="font-medium">{orderItem.item?.name}</TableCell>
                     <TableCell>{orderItem.supplier?.name ?? '—'}</TableCell>
                     <TableCell>

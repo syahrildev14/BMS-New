@@ -53,6 +53,7 @@ export default function PurchasingShoppingList({ until, rows }: { until: string;
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <TableHead>Barang</TableHead>
             <TableHead className="text-right">Kebutuhan</TableHead>
             <TableHead className="text-right">Stok Gudang</TableHead>
@@ -64,13 +65,14 @@ export default function PurchasingShoppingList({ until, rows }: { until: string;
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={7} className="h-32 text-center text-gray-400">
                 Tidak ada kebutuhan bahan kering yang belum dikirim s.d. tanggal ini.
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((row) => (
+            rows.map((row, index) => (
               <TableRow key={row.item_id} className={row.to_buy > 0 ? '' : 'text-gray-400 print:hidden'}>
+                <TableCell className="text-gray-500">{index + 1}</TableCell>
                 <TableCell className="font-medium">
                   {row.item_name} <span className="text-xs text-gray-400">({row.sku})</span>
                 </TableCell>

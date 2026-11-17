@@ -232,6 +232,7 @@ export default function OpsDeliveryNotesIndex({
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">No.</TableHead>
                       <TableHead>Item</TableHead>
                       <TableHead>Qty</TableHead>
                       <TableHead>No. Order</TableHead>
@@ -239,8 +240,9 @@ export default function OpsDeliveryNotesIndex({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {group.items.map((line) => (
+                    {group.items.map((line, index) => (
                       <TableRow key={line.id}>
+                        <TableCell className="text-gray-500">{index + 1}</TableCell>
                         <TableCell>{line.item_name}</TableCell>
                         <TableCell>
                           {formatQty(line.qty_ordered)} {line.satuan}
@@ -270,6 +272,7 @@ export default function OpsDeliveryNotesIndex({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="Nomor" columnKey="sj_number" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Jenis" columnKey="document_type" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Dapur" columnKey="dapur" sort={sort} onSort={toggleSort} />
@@ -282,13 +285,14 @@ export default function OpsDeliveryNotesIndex({
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={8} className="h-32 text-center text-gray-400">
                 {documents.length === 0 ? 'Belum ada dokumen pengiriman.' : 'Tidak ada dokumen yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((doc) => (
+            rows.map((doc, index) => (
               <TableRow key={doc.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{doc.sj_number}</TableCell>
                 <TableCell>{DOC_LABEL[doc.document_type]}</TableCell>
                 <TableCell>{doc.dapur?.name ?? '—'}</TableCell>

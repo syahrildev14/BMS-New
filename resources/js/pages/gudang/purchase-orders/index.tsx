@@ -38,6 +38,7 @@ export default function GudangPurchaseOrdersIndex({ groups }: { groups: Purchase
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="Tanggal Kirim" columnKey="date" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Jumlah PO" columnKey="po_count" sort={sort} onSort={toggleSort} />
             <TableHead className="text-right">Aksi</TableHead>
@@ -46,13 +47,14 @@ export default function GudangPurchaseOrdersIndex({ groups }: { groups: Purchase
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={3} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={4} className="h-32 text-center text-gray-400">
                 {groups.length === 0 ? 'Tidak ada PO yang menunggu penerimaan.' : 'Tidak ada tanggal yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((group) => (
+            rows.map((group, index) => (
               <TableRow key={group.date}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{group.date}</TableCell>
                 <TableCell>{group.po_count}</TableCell>
                 <TableCell className="text-right">

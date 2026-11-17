@@ -99,6 +99,7 @@ export default function AdminSuppliersIndex({ suppliers }: { suppliers: Supplier
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="Kode" columnKey="code" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Nama" columnKey="name" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="PIC" columnKey="pic_name" sort={sort} onSort={toggleSort} />
@@ -109,13 +110,14 @@ export default function AdminSuppliersIndex({ suppliers }: { suppliers: Supplier
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={5} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={6} className="h-32 text-center text-gray-400">
                 {suppliers.length === 0 ? 'Belum ada supplier.' : 'Tidak ada supplier yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((supplier) => (
+            rows.map((supplier, index) => (
               <TableRow key={supplier.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{supplier.code}</TableCell>
                 <TableCell>{supplier.name}</TableCell>
                 <TableCell>{supplier.pic_name ?? '-'}</TableCell>

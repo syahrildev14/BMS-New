@@ -58,6 +58,7 @@ export default function VerificationsIndex({ tab, today, documents }: { tab: 'op
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-12">No.</TableHead>
             <SortableTableHead label="Nomor" columnKey="sj_number" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Dapur" columnKey="dapur" sort={sort} onSort={toggleSort} />
             <SortableTableHead label="Supplier" columnKey="supplier" sort={sort} onSort={toggleSort} />
@@ -71,13 +72,14 @@ export default function VerificationsIndex({ tab, today, documents }: { tab: 'op
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={8} className="h-32 text-center text-gray-400">
+              <TableCell colSpan={9} className="h-32 text-center text-gray-400">
                 {documents.length === 0 ? 'Tidak ada dokumen di daftar ini.' : 'Tidak ada dokumen yang cocok dengan pencarian.'}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((doc) => (
+            rows.map((doc, index) => (
               <TableRow key={doc.id}>
+                <TableCell className="text-gray-500">{(page - 1) * pageSize + index + 1}</TableCell>
                 <TableCell className="font-medium">{doc.sj_number}</TableCell>
                 <TableCell>{doc.dapur?.name}</TableCell>
                 <TableCell>{doc.supplier?.name ?? 'Semua supplier'}</TableCell>

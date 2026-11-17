@@ -191,7 +191,7 @@ export function FinanceAnalyticsSection({ filters, summary, trend, arAging, apAg
       <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
         <h3 className="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-200">Margin per Kategori Barang</h3>
         <GroupedBarList
-          rows={byCategory.map((r) => ({ label: r.category === 'DRY_GOODS' ? 'Dry Goods' : 'Wet Goods', revenue: r.revenue, cogs: r.cogs }))}
+          rows={byCategory.map((r) => ({ label: r.category === 'DRY_GOODS' ? 'Kering' : 'Basah', revenue: r.revenue, cogs: r.cogs }))}
         />
       </div>
 
@@ -202,6 +202,7 @@ export function FinanceAnalyticsSection({ filters, summary, trend, arAging, apAg
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12">No.</TableHead>
                 <TableHead>Dapur</TableHead>
                 <TableHead className="text-right">Revenue</TableHead>
                 <TableHead className="text-right">COGS</TableHead>
@@ -209,8 +210,9 @@ export function FinanceAnalyticsSection({ filters, summary, trend, arAging, apAg
               </TableRow>
             </TableHeader>
             <TableBody>
-              {byDapur.map((row) => (
+              {byDapur.map((row, index) => (
                 <TableRow key={row.id}>
+                  <TableCell className="text-gray-500">{index + 1}</TableCell>
                   <TableCell className="font-medium">{row.label}</TableCell>
                   <TableCell className="text-right">{formatRupiah(row.revenue)}</TableCell>
                   <TableCell className="text-right">{formatRupiah(row.cogs)}</TableCell>
@@ -228,6 +230,7 @@ export function FinanceAnalyticsSection({ filters, summary, trend, arAging, apAg
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12">No.</TableHead>
                 <TableHead>Supplier</TableHead>
                 <TableHead className="text-right">Revenue</TableHead>
                 <TableHead className="text-right">COGS</TableHead>
@@ -235,8 +238,9 @@ export function FinanceAnalyticsSection({ filters, summary, trend, arAging, apAg
               </TableRow>
             </TableHeader>
             <TableBody>
-              {bySupplier.map((row) => (
+              {bySupplier.map((row, index) => (
                 <TableRow key={row.id}>
+                  <TableCell className="text-gray-500">{index + 1}</TableCell>
                   <TableCell className="font-medium">{row.label}</TableCell>
                   <TableCell className="text-right">{formatRupiah(row.revenue)}</TableCell>
                   <TableCell className="text-right">{formatRupiah(row.cogs)}</TableCell>
