@@ -68,7 +68,9 @@ class StockController extends Controller
                 'qty_in' => (float) ($movementsByItem[$item->id]->qty_in ?? 0),
                 'qty_out' => (float) ($movementsByItem[$item->id]->qty_out ?? 0),
                 'qty_on_hand' => (float) ($stockByItem[$item->id] ?? 0),
-                'last_price' => $lastPriceByItem[$item->id] ?? null,
+                // Belum ada pembelian (PO/Nota): pakai harga beli master (dari data Excel gudang).
+                'last_price' => $lastPriceByItem[$item->id]
+                    ?? ((float) $item->base_cost_price > 0 ? (float) $item->base_cost_price : null),
             ]);
 
         return Inertia::render('gudang/stock/index', [
