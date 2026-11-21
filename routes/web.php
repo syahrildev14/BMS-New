@@ -166,6 +166,9 @@ Route::middleware(['auth'])->group(function () {
         Route::resource('items', ItemController::class)
             ->only(['index', 'store', 'update', 'destroy'])
             ->middleware('permission:items.manage');
+        Route::patch('items/{item}/toggle-active', [ItemController::class, 'toggleActive'])
+            ->name('items.toggle-active')
+            ->middleware('permission:items.manage');
         Route::resource('satuans', SatuanController::class)
             ->only(['index', 'store', 'update', 'destroy'])
             ->middleware('permission:satuans.manage');

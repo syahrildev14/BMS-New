@@ -117,3 +117,22 @@ export function listAlert(message: string, items: string[], title = 'Perhatian')
     confirmButtonText: 'Mengerti',
   });
 }
+
+export async function confirmAction(options: {
+  title: string;
+  text?: string;
+  confirmText?: string;
+}): Promise<boolean> {
+  const result = await Swal.fire({
+    ...baseConfig,
+    icon: 'question',
+    title: options.title,
+    text: options.text,
+    showCancelButton: true,
+    confirmButtonText: options.confirmText ?? 'Ya, lanjutkan',
+    cancelButtonText: 'Batal',
+    reverseButtons: true,
+  });
+
+  return result.isConfirmed;
+}

@@ -1,4 +1,4 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import { type FormEventHandler, type ReactElement, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { AppLayout } from '@/layouts/AppLayout';
@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { TablePagination } from '@/shared/components/ui/table-pagination';
 import { TableSearchInput } from '@/shared/components/ui/table-search-input';
 import { useTableControls, type TableColumn } from '@/shared/hooks/use-table-controls';
-import { confirmDelete } from '@/shared/lib/alerts';
+import { confirmAction, confirmDelete } from '@/shared/lib/alerts';
 import { formatQty, formatRupiah } from '@/shared/lib/format';
 import type { Item, Satuan, Supplier } from '@/shared/types/prd.type';
 
@@ -94,6 +94,23 @@ export default function AdminItemsIndex({ items, suppliers, satuans }: { items: 
     }
   };
 
+  const toggleActive = async (item: Item) => {
+    const ok = await confirmAction(
+      item.is_active
+        ? {
+            title: `Nonaktifkan barang "${item.name}"?`,
+            text: 'Barang dan riwayatnya tetap tersimpan, tetapi tidak bisa dipilih lagi di Order Dapur, harga harian, dan nota pembelian.',
+            confirmText: 'Ya, nonaktifkan',
+          }
+        : {
+            title: `Aktifkan kembali barang "${item.name}"?`,
+            text: 'Barang akan bisa dipilih lagi di Order Dapur, harga harian, dan nota pembelian.',
+            confirmText: 'Ya, aktifkan',
+          },
+    );
+    if (ok) router.patch(route('admin.items.toggle-active', item.id), {}, { preserveScroll: true });
+  };
+
   const destroy = async (item: Item) => {
     const ok = await confirmDelete({ title: `Hapus barang "${item.name}"?` });
     if (ok) form.delete(route('admin.items.destroy', item.id));
@@ -161,6 +178,9 @@ export default function AdminItemsIndex({ items, suppliers, satuans }: { items: 
                   <div className="flex justify-end gap-2">
                     <Button variant="outline" size="sm" onClick={() => openEdit(item)}>
                       Edit
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => toggleActive(item)}>
+                      {item.is_active ? 'Nonaktifkan' : 'Aktifkan'}
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => destroy(item)}>
                       Hapus
